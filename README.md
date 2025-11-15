@@ -282,7 +282,7 @@ go build -o linear
 
 ## Architecture
 
-- **Framework**: Cobra (CLI framework) + Viper (configuration)
+- **CLI Framework**: Cobra
 - **GraphQL Client**: Simple HTTP client with manual type definitions
 - **Secure Storage**: 99designs/keyring (cross-platform keyring access)
 - **API**: Linear GraphQL API
