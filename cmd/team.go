@@ -28,7 +28,7 @@ var teamListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		resp, err := client.ListTeams(ctx, c)
+		resp, err := c.ListTeams(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching teams: %v\n", err)
 			os.Exit(1)

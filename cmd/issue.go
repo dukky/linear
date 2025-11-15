@@ -38,30 +38,7 @@ Use --team to filter by team key (e.g., --team ENG).`,
 
 		ctx := context.Background()
 
-		// Build filter
-		var filter *client.IssueFilter
-		if teamFilter != "" {
-			// Get team by key
-			teamResp, err := client.GetTeamByKey(ctx, c, teamFilter)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error fetching team: %v\n", err)
-				os.Exit(1)
-			}
-			if len(teamResp.Teams.Nodes) == 0 {
-				fmt.Fprintf(os.Stderr, "Team not found: %s\n", teamFilter)
-				os.Exit(1)
-			}
-
-			filter = &client.IssueFilter{
-				Team: &client.TeamFilter{
-					Key: &client.StringComparator{
-						Eq: &teamFilter,
-					},
-				},
-			}
-		}
-
-		resp, err := client.ListIssues(ctx, c, filter)
+		resp, err := c.ListIssues(ctx, teamFilter)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
 			os.Exit(1)
@@ -124,7 +101,7 @@ Examples:
 		}
 
 		ctx := context.Background()
-		resp, err := client.GetIssue(ctx, c, issueID)
+		resp, err := c.GetIssue(ctx, issueID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching issue: %v\n", err)
 			os.Exit(1)
@@ -180,7 +157,7 @@ Examples:
 			fmt.Printf("Completed:   %s\n", *issue.CompletedAt)
 		}
 
-		fmt.Printf("URL:         %s\n", issue.Url)
+		fmt.Printf("URL:         %s\n", issue.URL)
 
 		if issue.Description != nil && *issue.Description != "" {
 			fmt.Printf("\nDescription:\n%s\n", *issue.Description)
@@ -223,7 +200,7 @@ Examples:
 		ctx := context.Background()
 
 		// Get team by key to get the team ID
-		teamResp, err := client.GetTeamByKey(ctx, c, issueTeamID)
+		teamResp, err := c.GetTeamByKey(ctx, issueTeamID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching team: %v\n", err)
 			os.Exit(1)
@@ -233,21 +210,19 @@ Examples:
 			os.Exit(1)
 		}
 
-		teamID := teamResp.Teams.Nodes[0].Id
+		teamID := teamResp.Teams.Nodes[0].ID
 
 		// Create the issue
-		input := client.IssueCreateInput{
-			Title:         &issueTitle,
-			TeamId:        teamID,
-			LabelIds:      []string{},
-			SubscriberIds: []string{},
+		input := client.CreateIssueInput{
+			Title:  issueTitle,
+			TeamID: teamID,
 		}
 
 		if issueDesc != "" {
-			input.Description = &issueDesc
+			input.Description = issueDesc
 		}
 
-		resp, err := client.CreateIssue(ctx, c, &input)
+		resp, err := c.CreateIssue(ctx, input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating issue: %v\n", err)
 			os.Exit(1)
@@ -277,7 +252,7 @@ Examples:
 		fmt.Printf("Issue created successfully!\n")
 		fmt.Printf("ID:    %s\n", issue.Identifier)
 		fmt.Printf("Title: %s\n", issue.Title)
-		fmt.Printf("URL:   %s\n", issue.Url)
+		fmt.Printf("URL:   %s\n", issue.URL)
 	},
 }
 
