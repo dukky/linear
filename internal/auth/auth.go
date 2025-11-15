@@ -46,8 +46,10 @@ func SaveAPIKey(apiKey string) error {
 	}
 
 	err = ring.Set(keyring.Item{
-		Key:  keyringKey,
-		Data: []byte(apiKey),
+		Key:         keyringKey,
+		Data:        []byte(apiKey),
+		Label:       "Linear API Key",
+		Description: "API key for Linear CLI tool",
 	})
 	if err != nil {
 		return fmt.Errorf("failed to save API key to keyring: %w", err)
