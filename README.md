@@ -280,24 +280,21 @@ go build -o linear
 ./linear --help
 ```
 
-### Regenerating GraphQL Code
-
-If you modify the GraphQL queries in `queries.graphql`:
-
-```bash
-# Install genqlient
-go install github.com/Khan/genqlient@latest
-
-# Regenerate code
-~/go/bin/genqlient
-```
-
 ## Architecture
 
 - **Framework**: Cobra (CLI framework) + Viper (configuration)
-- **GraphQL Client**: genqlient (type-safe code generation)
+- **GraphQL Client**: Simple HTTP client with manual type definitions
 - **Secure Storage**: 99designs/keyring (cross-platform keyring access)
 - **API**: Linear GraphQL API
+
+### Design Philosophy
+
+This CLI uses a simple, manual GraphQL client approach instead of code generation:
+- **409 lines** of readable, maintainable client code
+- **No build steps** - just `go build` and you're done
+- **Full control** over JSON serialization and error handling
+- **Easy to modify** - all types and queries are in plain Go
+- **No dependencies** on schema files or code generators
 
 ## Contributing
 
