@@ -1,0 +1,125 @@
+# Get all teams
+query ListTeams {
+  teams {
+    nodes {
+      id
+      key
+      name
+      description
+    }
+  }
+}
+
+# List issues with optional team filter
+query ListIssues($filter: IssueFilter) {
+  issues(filter: $filter, first: 50) {
+    nodes {
+      id
+      identifier
+      title
+      description
+      priority
+      priorityLabel
+      createdAt
+      updatedAt
+      url
+      state {
+        name
+        color
+        type
+      }
+      assignee {
+        id
+        name
+        email
+      }
+      team {
+        id
+        key
+        name
+      }
+      project {
+        id
+        name
+      }
+      labels {
+        nodes {
+          id
+          name
+          color
+        }
+      }
+    }
+  }
+}
+
+# Get a single issue by ID
+query GetIssue($id: String!) {
+  issue(id: $id) {
+    id
+    identifier
+    title
+    description
+    priority
+    priorityLabel
+    createdAt
+    updatedAt
+    completedAt
+    url
+    state {
+      name
+      color
+      type
+    }
+    assignee {
+      id
+      name
+      email
+    }
+    team {
+      id
+      key
+      name
+    }
+    project {
+      id
+      name
+    }
+    labels {
+      nodes {
+        id
+        name
+        color
+      }
+    }
+    creator {
+      id
+      name
+      email
+    }
+  }
+}
+
+# Create a new issue
+mutation CreateIssue($input: IssueCreateInput!) {
+  issueCreate(input: $input) {
+    success
+    issue {
+      id
+      identifier
+      title
+      url
+    }
+  }
+}
+
+# Get team by key (for resolving team shortcuts)
+query GetTeamByKey($key: String!) {
+  teams(filter: { key: { eq: $key } }) {
+    nodes {
+      id
+      key
+      name
+    }
+  }
+}
