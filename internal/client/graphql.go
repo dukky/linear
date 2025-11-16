@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/dukky/linear/internal/auth"
 )
@@ -28,9 +29,11 @@ func NewClient() (*Client, error) {
 	}
 
 	return &Client{
-		httpClient: &http.Client{},
-		apiKey:     apiKey,
-		endpoint:   linearAPIURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		apiKey:   apiKey,
+		endpoint: linearAPIURL,
 	}, nil
 }
 
