@@ -51,10 +51,17 @@ type Label struct {
 	Color string `json:"color"`
 }
 
+// PageInfo contains pagination information
+type PageInfo struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
+}
+
 // IssuesResponse is the response for listing issues
 type IssuesResponse struct {
 	Issues struct {
-		Nodes []Issue `json:"nodes"`
+		Nodes    []Issue  `json:"nodes"`
+		PageInfo PageInfo `json:"pageInfo"`
 	} `json:"issues"`
 }
 
@@ -64,10 +71,11 @@ type IssueResponse struct {
 }
 
 // ListIssues retrieves issues with optional team filter
+// Automatically handles pagination to fetch all issues
 func (c *Client) ListIssues(ctx context.Context, teamKey string) (*IssuesResponse, error) {
 	query := `
-		query($filter: IssueFilter) {
-			issues(filter: $filter, first: 50) {
+		query($filter: IssueFilter, $after: String) {
+			issues(filter: $filter, first: 100, after: $after) {
 				nodes {
 					id
 					identifier
@@ -105,29 +113,61 @@ func (c *Client) ListIssues(ctx context.Context, teamKey string) (*IssuesRespons
 						}
 					}
 				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
 			}
 		}
 	`
 
-	var vars map[string]interface{}
-	if teamKey != "" {
-		vars = map[string]interface{}{
-			"filter": map[string]interface{}{
+	var allIssues []Issue
+	var cursor *string
+
+	// Fetch all pages
+	for {
+		vars := make(map[string]interface{})
+
+		if teamKey != "" {
+			vars["filter"] = map[string]interface{}{
 				"team": map[string]interface{}{
 					"key": map[string]interface{}{
 						"eq": teamKey,
 					},
 				},
-			},
+			}
 		}
+
+		if cursor != nil {
+			vars["after"] = *cursor
+		}
+
+		var resp IssuesResponse
+		if err := c.Do(ctx, query, vars, &resp); err != nil {
+			return nil, err
+		}
+
+		allIssues = append(allIssues, resp.Issues.Nodes...)
+
+		if !resp.Issues.PageInfo.HasNextPage {
+			break
+		}
+		cursor = &resp.Issues.PageInfo.EndCursor
 	}
 
-	var resp IssuesResponse
-	if err := c.Do(ctx, query, vars, &resp); err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
+	// Return a consolidated response
+	return &IssuesResponse{
+		Issues: struct {
+			Nodes    []Issue  `json:"nodes"`
+			PageInfo PageInfo `json:"pageInfo"`
+		}{
+			Nodes: allIssues,
+			PageInfo: PageInfo{
+				HasNextPage: false,
+				EndCursor:   "",
+			},
+		},
+	}, nil
 }
 
 // GetIssue retrieves a single issue by ID or identifier
