@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/dukky/linear/internal/auth"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var authCmd = &cobra.Command{
@@ -31,14 +31,14 @@ Alternatively, you can set the LINEAR_API_KEY environment variable.`,
 		fmt.Println("Enter your Linear API key (starts with 'lin_api_'):")
 		fmt.Print("> ")
 
-		reader := bufio.NewReader(os.Stdin)
-		apiKey, err := reader.ReadString('\n')
+		apiKeyBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+			fmt.Fprintf(os.Stderr, "\nError reading input: %v\n", err)
 			os.Exit(1)
 		}
+		fmt.Println() // Add newline after password input
 
-		apiKey = strings.TrimSpace(apiKey)
+		apiKey := strings.TrimSpace(string(apiKeyBytes))
 		if apiKey == "" {
 			fmt.Fprintln(os.Stderr, "Error: API key cannot be empty")
 			os.Exit(1)
