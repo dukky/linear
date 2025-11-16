@@ -1,4 +1,4 @@
-module github.com/andreasholley/linear-cli
+module github.com/dukky/linear
 
 go 1.24.3
 

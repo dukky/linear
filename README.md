@@ -17,7 +17,7 @@ A command-line interface for Linear issue tracking, designed for seamless integr
 ### Using `go install` (Recommended)
 
 ```bash
-go install github.com/andreasholley/linear-cli@latest
+go install github.com/dukky/linear@latest
 ```
 
 This will install the `linear` binary to your `$GOBIN` directory (typically `~/go/bin`). Make sure this directory is in your `PATH`.
@@ -25,7 +25,7 @@ This will install the `linear` binary to your `$GOBIN` directory (typically `~/g
 ### From Source
 
 ```bash
-git clone https://github.com/andreasholley/linear-cli.git
+git clone https://github.com/dukky/linear.git
 cd linear-cli
 go build -o linear
 sudo mv linear /usr/local/bin/  # Optional: move to PATH
@@ -267,7 +267,7 @@ echo "$issues" | jq '.[] | select(.priority > 2)'
 
 ```bash
 # Clone the repository
-git clone https://github.com/andreasholley/linear-cli.git
+git clone https://github.com/dukky/linear.git
 cd linear-cli
 
 # Install dependencies

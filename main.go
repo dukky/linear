@@ -1,6 +1,6 @@
 package main
 
-import "github.com/andreasholley/linear-cli/cmd"
+import "github.com/dukky/linear/cmd"
 
 func main() {
 	cmd.Execute()

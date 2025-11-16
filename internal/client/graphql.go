@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/andreasholley/linear-cli/internal/auth"
+	"github.com/dukky/linear/internal/auth"
 )
 
 const linearAPIURL = "https://api.linear.app/graphql"

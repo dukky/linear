@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/andreasholley/linear-cli/internal/auth"
+	"github.com/dukky/linear/internal/auth"
 	"github.com/spf13/cobra"
 )
 

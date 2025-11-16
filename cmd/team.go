@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/andreasholley/linear-cli/internal/client"
-	"github.com/andreasholley/linear-cli/internal/output"
+	"github.com/dukky/linear/internal/client"
+	"github.com/dukky/linear/internal/output"
 	"github.com/spf13/cobra"
 )
 
