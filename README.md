@@ -157,9 +157,41 @@ linear issue create --team ENG --title "Bug fix" --json
 
 ## Claude Code Integration
 
-This CLI is designed to work seamlessly with Claude Code. Here's an example workflow:
+This CLI is designed to work seamlessly with Claude Code through a built-in skill that enables automatic tool calling.
 
-### Example 1: Working on a Linear ticket
+### Using the Claude Code Skill
+
+This repository includes a Claude Code skill (`.claude/skills/linear.md`) that teaches Claude how to use the Linear CLI automatically. When you open this repository in Claude Code, it will automatically detect and load the skill.
+
+**What this enables:**
+- Ask Claude to list issues: "Show me all issues in the ENG team"
+- Create issues naturally: "Create a bug report for the login issue in PROD"
+- View issue details: "What's the status of ENG-123?"
+- Get team information: "List all teams in the workspace"
+
+Claude will automatically invoke the appropriate CLI commands and parse the results for you.
+
+### Setup for Claude Code
+
+1. **Install the Linear CLI**:
+   ```bash
+   go install github.com/dukky/linear@latest
+   ```
+
+2. **Authenticate**:
+   ```bash
+   linear auth login
+   ```
+
+3. **Open this repository in Claude Code** - the skill will be automatically loaded
+
+That's it! Claude will now be able to interact with Linear on your behalf.
+
+### Manual Usage Examples
+
+You can also use the CLI directly:
+
+#### Example 1: Working on a Linear ticket
 
 ```bash
 # View the issue details
@@ -170,7 +202,7 @@ linear issue view ENG-123
 linear issue view ENG-123 --json
 ```
 
-### Example 2: Creating tickets from Claude Code
+#### Example 2: Creating tickets from Claude Code
 
 ```bash
 # Claude Code can create tickets for new bugs or features
@@ -181,7 +213,7 @@ linear issue create \
   --json
 ```
 
-### Example 3: Listing issues for a sprint
+#### Example 3: Listing issues for a sprint
 
 ```bash
 # Get all issues for a specific team
