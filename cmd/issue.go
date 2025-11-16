@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/dukky/linear/internal/client"
 	"github.com/dukky/linear/internal/output"
@@ -36,7 +37,8 @@ Use --team to filter by team key (e.g., --team ENG).`,
 			os.Exit(1)
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
 		resp, err := c.ListIssues(ctx, teamFilter)
 		if err != nil {
@@ -100,7 +102,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 		resp, err := c.GetIssue(ctx, issueID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching issue: %v\n", err)
@@ -197,7 +200,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
 		// Get team by key to get the team ID
 		teamResp, err := c.GetTeamByKey(ctx, issueTeamID)

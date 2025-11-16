@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/dukky/linear/internal/client"
 	"github.com/dukky/linear/internal/output"
@@ -27,7 +28,8 @@ var teamListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 		resp, err := c.ListTeams(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching teams: %v\n", err)
