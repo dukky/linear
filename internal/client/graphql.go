@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dukky/linear/internal/auth"
@@ -89,7 +90,15 @@ func (c *Client) Do(ctx context.Context, query string, variables map[string]inte
 	}
 
 	if len(gqlResp.Errors) > 0 {
-		return fmt.Errorf("%s", gqlResp.Errors[0].Message)
+		if len(gqlResp.Errors) == 1 {
+			return fmt.Errorf("%s", gqlResp.Errors[0].Message)
+		}
+		// Multiple errors - report all of them
+		var errMsgs []string
+		for _, err := range gqlResp.Errors {
+			errMsgs = append(errMsgs, err.Message)
+		}
+		return fmt.Errorf("multiple errors: %s", strings.Join(errMsgs, "; "))
 	}
 
 	if result != nil && len(gqlResp.Data) > 0 {
