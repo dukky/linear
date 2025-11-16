@@ -256,6 +256,31 @@ issues=$(linear issue list --team ENG --json)
 echo "$issues" | jq '.[] | select(.priority > 2)'
 ```
 
+## Security
+
+### Keychain Access on macOS
+
+The Linear CLI stores your API key in the system keychain with "allow all applications" access on macOS. This design choice prevents repeated password prompts when rebuilding the tool during development (each rebuild changes the binary hash, which would normally require re-authorization).
+
+**Security Trade-offs:**
+- ✅ **Convenient**: No password prompts on every rebuild during development
+- ⚠️ **Less Restrictive**: Any application on your Mac can access the stored API key
+
+**Alternative Options:**
+
+If you prefer stricter security:
+
+1. **Use Environment Variable**: Set `LINEAR_API_KEY` instead of storing in keychain
+   ```bash
+   export LINEAR_API_KEY=lin_api_...
+   ```
+
+2. **Manual Keychain Configuration**: After running `linear auth login`, open Keychain Access.app and manually configure access control for the "Linear API Key" item
+
+3. **Code Signing**: Sign the binary with an Apple Developer certificate to avoid re-prompts while maintaining strict keychain access control
+
+For most users, the default keychain storage provides a good balance of security and usability for a development tool.
+
 ## Development
 
 ### Prerequisites

@@ -86,6 +86,17 @@ func GetAuthStatus() (string, bool) {
 func openKeyring() (keyring.Keyring, error) {
 	return keyring.Open(keyring.Config{
 		ServiceName: keyringService,
+		// Trust this application by default to avoid keychain password prompts
+		// on every rebuild. This is appropriate for a developer CLI tool that
+		// gets rebuilt frequently with 'go install'. Each rebuild changes the
+		// binary hash, which would normally trigger a new authorization prompt.
+		//
+		// Setting this to true passes TrustedApplications=nil to macOS Keychain,
+		// allowing any application to access this item without prompting.
+		// Users who prefer stricter security can:
+		//   1. Use the LINEAR_API_KEY environment variable instead, or
+		//   2. Manually configure access control in Keychain Access.app
+		KeychainTrustApplication: true,
 		// Use the most appropriate backend for each OS
 		AllowedBackends: []keyring.BackendType{
 			keyring.KeychainBackend,       // macOS
