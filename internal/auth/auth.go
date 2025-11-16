@@ -88,11 +88,11 @@ func openKeyring() (keyring.Keyring, error) {
 		ServiceName: keyringService,
 		// Use the most appropriate backend for each OS
 		AllowedBackends: []keyring.BackendType{
-			keyring.KeychainBackend,       // macOS
-			keyring.WinCredBackend,        // Windows
-			keyring.SecretServiceBackend,  // Linux with Secret Service
-			keyring.KWalletBackend,        // KDE
-			keyring.FileBackend,           // Fallback to encrypted file
+			keyring.KeychainBackend,      // macOS
+			keyring.WinCredBackend,       // Windows
+			keyring.SecretServiceBackend, // Linux with Secret Service
+			keyring.KWalletBackend,       // KDE
+			keyring.FileBackend,          // Fallback to encrypted file
 		},
 	})
 }

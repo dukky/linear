@@ -20,8 +20,8 @@ func TestPrintJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "array",
-			data: []string{"a", "b", "c"},
+			name:    "array",
+			data:    []string{"a", "b", "c"},
 			wantErr: false,
 		},
 		{
