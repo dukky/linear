@@ -14,6 +14,34 @@ const (
 	envVarName     = "LINEAR_API_KEY"
 )
 
+// KeyringProvider is an interface for accessing keyring operations
+type KeyringProvider interface {
+	Get(key string) (keyring.Item, error)
+	Set(item keyring.Item) error
+}
+
+// defaultKeyringProvider wraps the actual keyring.Keyring
+type defaultKeyringProvider struct {
+	ring keyring.Keyring
+}
+
+func (p *defaultKeyringProvider) Get(key string) (keyring.Item, error) {
+	return p.ring.Get(key)
+}
+
+func (p *defaultKeyringProvider) Set(item keyring.Item) error {
+	return p.ring.Set(item)
+}
+
+// keyringOpener is a function type for opening keyrings (allows testing)
+var keyringOpener = func() (KeyringProvider, error) {
+	ring, err := openKeyring()
+	if err != nil {
+		return nil, err
+	}
+	return &defaultKeyringProvider{ring: ring}, nil
+}
+
 // GetAPIKey retrieves the Linear API key from keyring or environment variable
 func GetAPIKey() (string, error) {
 	// First, check environment variable
@@ -22,7 +50,7 @@ func GetAPIKey() (string, error) {
 	}
 
 	// Then check keyring
-	ring, err := openKeyring()
+	ring, err := keyringOpener()
 	if err != nil {
 		return "", fmt.Errorf("failed to access keyring: %w", err)
 	}
@@ -40,7 +68,7 @@ func GetAPIKey() (string, error) {
 
 // SaveAPIKey stores the API key in the system keyring
 func SaveAPIKey(apiKey string) error {
-	ring, err := openKeyring()
+	ring, err := keyringOpener()
 	if err != nil {
 		return fmt.Errorf("failed to access keyring: %w", err)
 	}
@@ -66,7 +94,7 @@ func GetAuthStatus() (string, bool) {
 	}
 
 	// Check keyring
-	ring, err := openKeyring()
+	ring, err := keyringOpener()
 	if err != nil {
 		return fmt.Sprintf("Error accessing keyring: %v", err), false
 	}
