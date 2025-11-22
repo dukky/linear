@@ -23,6 +23,11 @@ func TestClient_ListIssues_NoFilter(t *testing.T) {
 			t.Error("Expected query to be non-empty")
 		}
 
+		// Verify the default limit is set
+		if first, ok := req.Variables["first"].(float64); !ok || first != 50 {
+			t.Errorf("Expected first to be 50, got %v", req.Variables["first"])
+		}
+
 		// Return a mock response
 		response := graphQLResponse{
 			Data: json.RawMessage(`{
@@ -38,7 +43,11 @@ func TestClient_ListIssues_NoFilter(t *testing.T) {
 							"updatedAt": "2024-01-01T00:00:00Z",
 							"url": "https://linear.app/test/issue/TEST-1"
 						}
-					]
+					],
+					"pageInfo": {
+						"hasNextPage": false,
+						"endCursor": ""
+					}
 				}
 			}`),
 		}
@@ -52,7 +61,8 @@ func TestClient_ListIssues_NoFilter(t *testing.T) {
 		endpoint:   server.URL,
 	}
 
-	resp, err := client.ListIssues(context.Background(), "")
+	opts := ListIssuesOptions{}
+	resp, err := client.ListIssues(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -63,6 +73,10 @@ func TestClient_ListIssues_NoFilter(t *testing.T) {
 
 	if resp.Issues.Nodes[0].Identifier != "TEST-1" {
 		t.Errorf("Expected identifier 'TEST-1', got '%s'", resp.Issues.Nodes[0].Identifier)
+	}
+
+	if resp.Issues.PageInfo.HasNextPage {
+		t.Error("Expected hasNextPage to be false")
 	}
 }
 
@@ -82,7 +96,15 @@ func TestClient_ListIssues_WithTeamFilter(t *testing.T) {
 
 		// Return a mock response
 		response := graphQLResponse{
-			Data: json.RawMessage(`{"issues": {"nodes": []}}`),
+			Data: json.RawMessage(`{
+				"issues": {
+					"nodes": [],
+					"pageInfo": {
+						"hasNextPage": false,
+						"endCursor": ""
+					}
+				}
+			}`),
 		}
 		json.NewEncoder(w).Encode(response)
 	}))
@@ -94,7 +116,8 @@ func TestClient_ListIssues_WithTeamFilter(t *testing.T) {
 		endpoint:   server.URL,
 	}
 
-	_, err := client.ListIssues(context.Background(), "ENG")
+	opts := ListIssuesOptions{TeamKey: "ENG"}
+	_, err := client.ListIssues(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -245,5 +268,240 @@ func TestClient_CreateIssue_Error(t *testing.T) {
 	_, err := client.CreateIssue(context.Background(), input)
 	if err == nil {
 		t.Error("Expected an error, got nil")
+	}
+}
+
+func TestClient_ListIssues_WithCustomLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		// Verify the custom limit is set
+		if first, ok := req.Variables["first"].(float64); !ok || first != 100 {
+			t.Errorf("Expected first to be 100, got %v", req.Variables["first"])
+		}
+
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issues": {
+					"nodes": [],
+					"pageInfo": {
+						"hasNextPage": false,
+						"endCursor": ""
+					}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	opts := ListIssuesOptions{Limit: 100}
+	_, err := client.ListIssues(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+}
+
+func TestClient_ListIssues_WithPagination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		// Check if this is a paginated request
+		cursor, hasCursor := req.Variables["after"].(string)
+
+		var response graphQLResponse
+		if !hasCursor || cursor == "" {
+			// First page
+			response = graphQLResponse{
+				Data: json.RawMessage(`{
+					"issues": {
+						"nodes": [
+							{
+								"id": "issue-1",
+								"identifier": "TEST-1",
+								"title": "Test Issue 1",
+								"priority": 1,
+								"priorityLabel": "High",
+								"createdAt": "2024-01-01T00:00:00Z",
+								"updatedAt": "2024-01-01T00:00:00Z",
+								"url": "https://linear.app/test/issue/TEST-1"
+							}
+						],
+						"pageInfo": {
+							"hasNextPage": true,
+							"endCursor": "cursor-1"
+						}
+					}
+				}`),
+			}
+		} else {
+			// Second page
+			response = graphQLResponse{
+				Data: json.RawMessage(`{
+					"issues": {
+						"nodes": [
+							{
+								"id": "issue-2",
+								"identifier": "TEST-2",
+								"title": "Test Issue 2",
+								"priority": 1,
+								"priorityLabel": "High",
+								"createdAt": "2024-01-01T00:00:00Z",
+								"updatedAt": "2024-01-01T00:00:00Z",
+								"url": "https://linear.app/test/issue/TEST-2"
+							}
+						],
+						"pageInfo": {
+							"hasNextPage": false,
+							"endCursor": "cursor-2"
+						}
+					}
+				}`),
+			}
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	// First page
+	opts := ListIssuesOptions{}
+	resp, err := client.ListIssues(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(resp.Issues.Nodes) != 1 {
+		t.Errorf("Expected 1 issue on first page, got %d", len(resp.Issues.Nodes))
+	}
+
+	if !resp.Issues.PageInfo.HasNextPage {
+		t.Error("Expected hasNextPage to be true on first page")
+	}
+
+	// Second page
+	opts.After = resp.Issues.PageInfo.EndCursor
+	resp2, err := client.ListIssues(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Expected no error on second page, got %v", err)
+	}
+
+	if len(resp2.Issues.Nodes) != 1 {
+		t.Errorf("Expected 1 issue on second page, got %d", len(resp2.Issues.Nodes))
+	}
+
+	if resp2.Issues.PageInfo.HasNextPage {
+		t.Error("Expected hasNextPage to be false on second page")
+	}
+}
+
+func TestClient_ListAllIssues(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		callCount++
+		var response graphQLResponse
+
+		if callCount == 1 {
+			// First page
+			response = graphQLResponse{
+				Data: json.RawMessage(`{
+					"issues": {
+						"nodes": [
+							{
+								"id": "issue-1",
+								"identifier": "TEST-1",
+								"title": "Test Issue 1",
+								"priority": 1,
+								"priorityLabel": "High",
+								"createdAt": "2024-01-01T00:00:00Z",
+								"updatedAt": "2024-01-01T00:00:00Z",
+								"url": "https://linear.app/test/issue/TEST-1"
+							}
+						],
+						"pageInfo": {
+							"hasNextPage": true,
+							"endCursor": "cursor-1"
+						}
+					}
+				}`),
+			}
+		} else {
+			// Second page
+			response = graphQLResponse{
+				Data: json.RawMessage(`{
+					"issues": {
+						"nodes": [
+							{
+								"id": "issue-2",
+								"identifier": "TEST-2",
+								"title": "Test Issue 2",
+								"priority": 1,
+								"priorityLabel": "High",
+								"createdAt": "2024-01-01T00:00:00Z",
+								"updatedAt": "2024-01-01T00:00:00Z",
+								"url": "https://linear.app/test/issue/TEST-2"
+							}
+						],
+						"pageInfo": {
+							"hasNextPage": false,
+							"endCursor": "cursor-2"
+						}
+					}
+				}`),
+			}
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	issues, err := client.ListAllIssues(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(issues) != 2 {
+		t.Errorf("Expected 2 issues total, got %d", len(issues))
+	}
+
+	if callCount != 2 {
+		t.Errorf("Expected 2 API calls, got %d", callCount)
+	}
+
+	if issues[0].Identifier != "TEST-1" {
+		t.Errorf("Expected first issue identifier 'TEST-1', got '%s'", issues[0].Identifier)
+	}
+
+	if issues[1].Identifier != "TEST-2" {
+		t.Errorf("Expected second issue identifier 'TEST-2', got '%s'", issues[1].Identifier)
 	}
 }

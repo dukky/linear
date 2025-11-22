@@ -132,7 +132,7 @@ Response wrappers:
 
 ## Claude Code Integration
 
-This repository includes `.claude/skills/linear.md` which enables automatic tool calling for Linear operations. When users ask Claude to interact with Linear (list issues, create issues, view details), Claude will automatically invoke the CLI with appropriate commands and parse JSON output.
+This repository includes `.claude/skills/linear/SKILL.md` which enables automatic tool calling for Linear operations. When users ask Claude to interact with Linear (list issues, create issues, view details), Claude will automatically invoke the CLI with appropriate commands and parse JSON output.
 
 ### Using the Linear CLI from Claude Code
 

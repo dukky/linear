@@ -1,5 +1,5 @@
 # Binaries
-linear
+/linear
 *.exe
 *.exe~
 *.dll

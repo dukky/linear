@@ -111,18 +111,30 @@ linear team list --json
 ### Issue Commands
 
 #### `linear issue list`
-List issues with optional filtering.
+List issues with optional filtering and pagination control.
 
 ```bash
-# List all issues
+# List all issues (default: 50 most recent)
 linear issue list
 
 # Filter by team
 linear issue list --team ENG
 
+# Limit the number of issues returned
+linear issue list --team ENG --limit 10
+
+# Fetch all issues using automatic pagination
+linear issue list --team ENG --all
+
 # JSON output for automation
 linear issue list --team ENG --json
 ```
+
+**Pagination options:**
+- `--limit N`: Fetch up to N issues (default: 50)
+- `--all`: Automatically fetch all issues using cursor-based pagination
+
+The default behavior returns up to 50 issues. Use `--limit` to fetch more or fewer issues in a single request, or use `--all` to automatically fetch all issues across multiple pages.
 
 #### `linear issue view <issue-id>`
 View detailed information about a specific issue.
@@ -161,7 +173,7 @@ This CLI is designed to work seamlessly with Claude Code through a built-in skil
 
 ### Using the Claude Code Skill
 
-This repository includes a Claude Code skill (`.claude/skills/linear.md`) that teaches Claude how to use the Linear CLI automatically. When you open this repository in Claude Code, it will automatically detect and load the skill.
+This repository includes a Claude Code skill (`.claude/skills/linear/SKILL.md`) that teaches Claude how to use the Linear CLI automatically. When you open this repository in Claude Code, it will automatically detect and load the skill.
 
 **What this enables:**
 - Ask Claude to list issues: "Show me all issues in the ENG team"
@@ -281,11 +293,24 @@ linear issue create \
 ```bash
 #!/bin/bash
 
-# Get all high-priority issues as JSON
-issues=$(linear issue list --team ENG --json)
+# Get all issues as JSON (fetches all pages automatically)
+issues=$(linear issue list --team ENG --all --json)
 
 # Process with jq or other tools
 echo "$issues" | jq '.[] | select(.priority > 2)'
+```
+
+### Example: Working with Large Issue Lists
+
+```bash
+# Get the first 10 issues for quick overview
+linear issue list --team ENG --limit 10
+
+# Get all issues when you need the complete list
+linear issue list --team ENG --all
+
+# Combine with JSON for processing large datasets
+linear issue list --all --json | jq 'length'  # Count total issues
 ```
 
 ## Development
