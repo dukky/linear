@@ -1,4 +1,5 @@
 ---
+name: linear
 description: Interact with Linear issues and teams using the Linear CLI
 tags: [linear, issues, project-management, productivity]
 ---
@@ -59,7 +60,7 @@ Returns structured JSON data for programmatic use.
 ```bash
 linear issue list
 ```
-Shows up to 50 most recent issues across all teams.
+Shows up to 50 most recent issues across all teams (default limit).
 
 #### List issues for a specific team
 ```bash
@@ -67,12 +68,26 @@ linear issue list --team ENG
 ```
 Filter issues by team key (e.g., ENG, PROD, DESIGN).
 
+#### List issues with custom limit
+```bash
+linear issue list --team ENG --limit 10
+```
+Fetch a specific number of issues (useful for quick overviews or fetching more than 50).
+
+#### Fetch all issues using pagination
+```bash
+linear issue list --team ENG --all
+```
+Automatically fetches all issues using cursor-based pagination. Use when you need the complete list of issues (especially if there are more than 50).
+
 #### List issues as JSON
 ```bash
 linear issue list --json
 linear issue list --team ENG --json
+linear issue list --team ENG --all --json
+linear issue list --limit 100 --json
 ```
-Returns structured JSON data.
+Returns structured JSON data. Can be combined with `--limit` or `--all` flags.
 
 #### View issue details
 ```bash
@@ -201,13 +216,33 @@ When the user asks: "What's the status of ENG-123?"
 
 ### Example 4: Search for specific issues
 ```bash
-linear issue list --team ENG --json
+linear issue list --team ENG --all --json
 ```
 
 When the user asks: "Find all bugs in the Engineering team"
+- Use `--all` flag to ensure you get all issues, not just the first 50
 - List issues for the team using `--json` flag
 - Filter the results by looking at labels or title
 - Present matching issues
+
+### Example 5: Get a quick overview of recent issues
+```bash
+linear issue list --team ENG --limit 5 --json
+```
+
+When the user asks: "What are the latest issues in the ENG team?"
+- Use `--limit 5` to get just the most recent issues
+- Parse and present them clearly
+
+### Example 6: Count total issues
+```bash
+linear issue list --team ENG --all --json
+```
+
+When the user asks: "How many issues does the ENG team have?"
+- Use `--all` to fetch complete list
+- Parse JSON and count the array length
+- Report the total
 
 ## Important Notes
 
@@ -240,7 +275,10 @@ When the user asks: "Find all bugs in the Engineering team"
 3. **Always validate team keys** by listing teams first if unsure
 4. **Provide context** when creating issues - include relevant description
 5. **Handle errors gracefully** and suggest solutions to the user
-6. **Batch operations carefully** - Linear CLI returns up to 50 issues at a time
+6. **Choose appropriate pagination**:
+   - Use default (no flags) for most queries - returns up to 50 issues
+   - Use `--limit N` for quick overviews (e.g., `--limit 5` for recent issues)
+   - Use `--all` when you need the complete list (counting, searching across all issues)
 7. **Quote strings** with spaces in bash commands (e.g., `--title "Multi word title"`)
 
 ## Security Notes

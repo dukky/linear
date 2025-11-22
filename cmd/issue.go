@@ -16,6 +16,8 @@ var (
 	issueTitle  string
 	issueDesc   string
 	issueTeamID string
+	issueLimit  int
+	fetchAll    bool
 )
 
 var issueCmd = &cobra.Command{
@@ -29,7 +31,9 @@ var issueListCmd = &cobra.Command{
 	Short: "List issues",
 	Long: `List issues in your Linear workspace.
 
-Use --team to filter by team key (e.g., --team ENG).`,
+Use --team to filter by team key (e.g., --team ENG).
+Use --limit to specify the number of issues to fetch (default: 50).
+Use --all to fetch all issues using pagination.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		c, err := client.NewClient()
 		if err != nil {
@@ -40,14 +44,32 @@ Use --team to filter by team key (e.g., --team ENG).`,
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		resp, err := c.ListIssues(ctx, teamFilter)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
-			os.Exit(1)
+		var issues []client.Issue
+
+		if fetchAll {
+			// Fetch all issues using pagination
+			allIssues, err := c.ListAllIssues(ctx, teamFilter)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
+				os.Exit(1)
+			}
+			issues = allIssues
+		} else {
+			// Fetch with specified limit
+			opts := client.ListIssuesOptions{
+				TeamKey: teamFilter,
+				Limit:   issueLimit,
+			}
+			resp, err := c.ListIssues(ctx, opts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
+				os.Exit(1)
+			}
+			issues = resp.Issues.Nodes
 		}
 
 		if jsonOutput {
-			if err := output.PrintJSON(resp.Issues.Nodes); err != nil {
+			if err := output.PrintJSON(issues); err != nil {
 				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
 				os.Exit(1)
 			}
@@ -56,7 +78,7 @@ Use --team to filter by team key (e.g., --team ENG).`,
 
 		// Table output
 		table := output.NewTable([]string{"ID", "TITLE", "STATUS", "ASSIGNEE", "PRIORITY"})
-		for _, issue := range resp.Issues.Nodes {
+		for _, issue := range issues {
 			assignee := "-"
 			if issue.Assignee != nil {
 				assignee = issue.Assignee.Name
@@ -262,6 +284,8 @@ Examples:
 
 func init() {
 	issueListCmd.Flags().StringVar(&teamFilter, "team", "", "Filter by team key (e.g., ENG)")
+	issueListCmd.Flags().IntVar(&issueLimit, "limit", 50, "Maximum number of issues to fetch (default: 50)")
+	issueListCmd.Flags().BoolVar(&fetchAll, "all", false, "Fetch all issues using pagination")
 
 	issueCreateCmd.Flags().StringVar(&issueTitle, "title", "", "Issue title (required)")
 	issueCreateCmd.Flags().StringVar(&issueDesc, "description", "", "Issue description")

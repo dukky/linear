@@ -54,8 +54,15 @@ type Label struct {
 // IssuesResponse is the response for listing issues
 type IssuesResponse struct {
 	Issues struct {
-		Nodes []Issue `json:"nodes"`
+		Nodes    []Issue  `json:"nodes"`
+		PageInfo PageInfo `json:"pageInfo"`
 	} `json:"issues"`
+}
+
+// PageInfo contains pagination information
+type PageInfo struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
 }
 
 // IssueResponse is the response for getting a single issue
@@ -63,11 +70,18 @@ type IssueResponse struct {
 	Issue *Issue `json:"issue"`
 }
 
-// ListIssues retrieves issues with optional team filter
-func (c *Client) ListIssues(ctx context.Context, teamKey string) (*IssuesResponse, error) {
+// ListIssuesOptions contains options for listing issues
+type ListIssuesOptions struct {
+	TeamKey string
+	Limit   int
+	After   string
+}
+
+// ListIssues retrieves issues with optional team filter and pagination
+func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*IssuesResponse, error) {
 	query := `
-		query($filter: IssueFilter) {
-			issues(filter: $filter, first: 50) {
+		query($filter: IssueFilter, $first: Int!, $after: String) {
+			issues(filter: $filter, first: $first, after: $after) {
 				nodes {
 					id
 					identifier
@@ -105,18 +119,33 @@ func (c *Client) ListIssues(ctx context.Context, teamKey string) (*IssuesRespons
 						}
 					}
 				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
 			}
 		}
 	`
 
-	var vars map[string]interface{}
-	if teamKey != "" {
-		vars = map[string]interface{}{
-			"filter": map[string]interface{}{
-				"team": map[string]interface{}{
-					"key": map[string]interface{}{
-						"eq": teamKey,
-					},
+	// Default limit to 50 if not specified
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	vars := map[string]interface{}{
+		"first": limit,
+	}
+
+	if opts.After != "" {
+		vars["after"] = opts.After
+	}
+
+	if opts.TeamKey != "" {
+		vars["filter"] = map[string]interface{}{
+			"team": map[string]interface{}{
+				"key": map[string]interface{}{
+					"eq": opts.TeamKey,
 				},
 			},
 		}
@@ -128,6 +157,32 @@ func (c *Client) ListIssues(ctx context.Context, teamKey string) (*IssuesRespons
 	}
 
 	return &resp, nil
+}
+
+// ListAllIssues retrieves all issues using cursor-based pagination
+func (c *Client) ListAllIssues(ctx context.Context, teamKey string) ([]Issue, error) {
+	var allIssues []Issue
+	opts := ListIssuesOptions{
+		TeamKey: teamKey,
+		Limit:   100, // Use larger page size for efficiency
+	}
+
+	for {
+		resp, err := c.ListIssues(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		allIssues = append(allIssues, resp.Issues.Nodes...)
+
+		if !resp.Issues.PageInfo.HasNextPage {
+			break
+		}
+
+		opts.After = resp.Issues.PageInfo.EndCursor
+	}
+
+	return allIssues, nil
 }
 
 // GetIssue retrieves a single issue by ID or identifier
