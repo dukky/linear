@@ -1,6 +1,10 @@
 package client
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"time"
+)
 
 // Issue represents a Linear issue
 type Issue struct {
@@ -159,7 +163,10 @@ func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*Issue
 	return &resp, nil
 }
 
-// ListAllIssues retrieves all issues using cursor-based pagination
+// ListAllIssues retrieves all issues using cursor-based pagination.
+// It creates a new timeout context for each page to prevent timeout issues
+// when fetching large numbers of issues. The parent context provides overall
+// cancellation and timeout control.
 func (c *Client) ListAllIssues(ctx context.Context, teamKey string) ([]Issue, error) {
 	var allIssues []Issue
 	opts := ListIssuesOptions{
@@ -168,9 +175,22 @@ func (c *Client) ListAllIssues(ctx context.Context, teamKey string) ([]Issue, er
 	}
 
 	for {
-		resp, err := c.ListIssues(ctx, opts)
+		// Check if parent context is cancelled or timed out
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("operation cancelled after fetching %d issues: %w", len(allIssues), ctx.Err())
+		default:
+		}
+
+		// Create a new timeout context for this page request
+		// This ensures each page gets a full timeout window
+		pageCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+
+		resp, err := c.ListIssues(pageCtx, opts)
+		cancel() // Always cancel to free resources immediately
+
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to fetch page (retrieved %d issues so far): %w", len(allIssues), err)
 		}
 
 		allIssues = append(allIssues, resp.Issues.Nodes...)

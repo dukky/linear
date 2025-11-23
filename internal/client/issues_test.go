@@ -3,8 +3,11 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -503,5 +506,144 @@ func TestClient_ListAllIssues(t *testing.T) {
 
 	if issues[1].Identifier != "TEST-2" {
 		t.Errorf("Expected second issue identifier 'TEST-2', got '%s'", issues[1].Identifier)
+	}
+}
+
+func TestClient_ListAllIssues_WithTimeout(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		callCount++
+
+		// Simulate slow API response
+		time.Sleep(100 * time.Millisecond)
+
+		var response graphQLResponse
+		if callCount < 3 {
+			// Return pages with more data
+			response = graphQLResponse{
+				Data: json.RawMessage(fmt.Sprintf(`{
+					"issues": {
+						"nodes": [
+							{
+								"id": "issue-%d",
+								"identifier": "TEST-%d",
+								"title": "Test Issue %d",
+								"priority": 1,
+								"priorityLabel": "High",
+								"createdAt": "2024-01-01T00:00:00Z",
+								"updatedAt": "2024-01-01T00:00:00Z",
+								"url": "https://linear.app/test/issue/TEST-%d"
+							}
+						],
+						"pageInfo": {
+							"hasNextPage": true,
+							"endCursor": "cursor-%d"
+						}
+					}
+				}`, callCount, callCount, callCount, callCount, callCount)),
+			}
+		} else {
+			// Final page
+			response = graphQLResponse{
+				Data: json.RawMessage(fmt.Sprintf(`{
+					"issues": {
+						"nodes": [
+							{
+								"id": "issue-%d",
+								"identifier": "TEST-%d",
+								"title": "Test Issue %d",
+								"priority": 1,
+								"priorityLabel": "High",
+								"createdAt": "2024-01-01T00:00:00Z",
+								"updatedAt": "2024-01-01T00:00:00Z",
+								"url": "https://linear.app/test/issue/TEST-%d"
+							}
+						],
+						"pageInfo": {
+							"hasNextPage": false,
+							"endCursor": "cursor-%d"
+						}
+					}
+				}`, callCount, callCount, callCount, callCount, callCount)),
+			}
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	// Test with short timeout - should still succeed because each page gets its own timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	issues, err := client.ListAllIssues(ctx, "")
+
+	// With per-page timeouts, we should get at least the first page before parent timeout
+	if err == nil {
+		t.Errorf("Expected timeout error, got success with %d issues", len(issues))
+	}
+
+	if !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Errorf("Expected context deadline error, got: %v", err)
+	}
+}
+
+func TestClient_ListAllIssues_CancelledContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return a page with more data
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-1",
+							"identifier": "TEST-1",
+							"title": "Test Issue 1",
+							"priority": 1,
+							"priorityLabel": "High",
+							"createdAt": "2024-01-01T00:00:00Z",
+							"updatedAt": "2024-01-01T00:00:00Z",
+							"url": "https://linear.app/test/issue/TEST-1"
+						}
+					],
+					"pageInfo": {
+						"hasNextPage": true,
+						"endCursor": "cursor-1"
+					}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	issues, err := client.ListAllIssues(ctx, "")
+
+	if err == nil {
+		t.Errorf("Expected cancellation error, got success with %d issues", len(issues))
+	}
+
+	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "context canceled") {
+		t.Errorf("Expected context canceled error, got: %v", err)
 	}
 }
