@@ -12,12 +12,13 @@ import (
 )
 
 var (
-	teamFilter  string
-	issueTitle  string
-	issueDesc   string
-	issueTeamID string
-	issueLimit  int
-	fetchAll    bool
+	teamFilter           string
+	issueTitle           string
+	issueDesc            string
+	issueTeamID          string
+	issueProjectIdentifier string
+	issueLimit           int
+	fetchAll             bool
 )
 
 var issueCmd = &cobra.Command{
@@ -204,7 +205,8 @@ var issueCreateCmd = &cobra.Command{
 
 Examples:
   linear issue create --team ENG --title "Fix bug" --description "Bug details"
-  linear issue create --team ENG --title "New feature"`,
+  linear issue create --team ENG --title "New feature" --project "Mobile App"
+  linear issue create --team ENG --title "Task" --project "4e26961e-967f-458f-8fa2-4240035aa178"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if issueTitle == "" {
 			fmt.Fprintln(os.Stderr, "Error: --title is required")
@@ -238,6 +240,18 @@ Examples:
 
 		teamID := teamResp.Teams.Nodes[0].ID
 
+		// Resolve project if specified
+		var projectID string
+		if issueProjectIdentifier != "" {
+			project, err := c.GetProjectByIdentifier(ctx, issueProjectIdentifier, teamID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fetching project: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Tip: Run 'linear project list --team %s' to see available projects\n", issueTeamID)
+				os.Exit(1)
+			}
+			projectID = project.ID
+		}
+
 		// Create the issue
 		input := client.CreateIssueInput{
 			Title:  issueTitle,
@@ -246,6 +260,10 @@ Examples:
 
 		if issueDesc != "" {
 			input.Description = issueDesc
+		}
+
+		if projectID != "" {
+			input.ProjectID = projectID
 		}
 
 		resp, err := c.CreateIssue(ctx, input)
@@ -290,6 +308,7 @@ func init() {
 	issueCreateCmd.Flags().StringVar(&issueTitle, "title", "", "Issue title (required)")
 	issueCreateCmd.Flags().StringVar(&issueDesc, "description", "", "Issue description")
 	issueCreateCmd.Flags().StringVar(&issueTeamID, "team", "", "Team key (required)")
+	issueCreateCmd.Flags().StringVar(&issueProjectIdentifier, "project", "", "Project name or ID (optional)")
 
 	issueCmd.AddCommand(issueListCmd)
 	issueCmd.AddCommand(issueViewCmd)
