@@ -252,7 +252,6 @@ type CreateIssueInput struct {
 	Title         string   `json:"title"`
 	Description   string   `json:"description,omitempty"`
 	TeamID        string   `json:"teamId"`
-	ProjectID     string   `json:"projectId,omitempty"`
 	LabelIds      []string `json:"labelIds,omitempty"`
 	SubscriberIds []string `json:"subscriberIds,omitempty"`
 }
