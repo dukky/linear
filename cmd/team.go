@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/dukky/linear/internal/client"
@@ -21,27 +20,24 @@ var teamListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all teams",
 	Long:  "List all teams in your Linear workspace",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		c, err := client.NewClient()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		resp, err := c.ListTeams(ctx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching teams: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error fetching teams: %w", err)
 		}
 
 		if jsonOutput {
 			if err := output.PrintJSON(resp.Teams.Nodes); err != nil {
-				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error formatting output: %w", err)
 			}
-			return
+			return nil
 		}
 
 		// Table output
@@ -54,6 +50,7 @@ var teamListCmd = &cobra.Command{
 			table.AddRow([]string{team.Key, team.Name, desc})
 		}
 		table.Print()
+		return nil
 	},
 }
 

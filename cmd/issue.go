@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/dukky/linear/internal/client"
@@ -34,11 +33,10 @@ var issueListCmd = &cobra.Command{
 Use --team to filter by team key (e.g., --team ENG).
 Use --limit to specify the number of issues to fetch (default: 50).
 Use --all to fetch all issues using pagination.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		c, err := client.NewClient()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -50,8 +48,7 @@ Use --all to fetch all issues using pagination.`,
 			// Fetch all issues using pagination
 			allIssues, err := c.ListAllIssues(ctx, teamFilter)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error fetching issues: %w", err)
 			}
 			issues = allIssues
 		} else {
@@ -62,18 +59,16 @@ Use --all to fetch all issues using pagination.`,
 			}
 			resp, err := c.ListIssues(ctx, opts)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error fetching issues: %w", err)
 			}
 			issues = resp.Issues.Nodes
 		}
 
 		if jsonOutput {
 			if err := output.PrintJSON(issues); err != nil {
-				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error formatting output: %w", err)
 			}
-			return
+			return nil
 		}
 
 		// Table output
@@ -103,6 +98,7 @@ Use --all to fetch all issues using pagination.`,
 			})
 		}
 		table.Print()
+		return nil
 	},
 }
 
@@ -115,36 +111,32 @@ Examples:
   linear issue view ENG-123
   linear issue view <issue-uuid>`,
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		issueID := args[0]
 
 		c, err := client.NewClient()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		resp, err := c.GetIssue(ctx, issueID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching issue: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error fetching issue: %w", err)
 		}
 
 		if resp.Issue == nil {
-			fmt.Fprintf(os.Stderr, "Issue not found: %s\n", issueID)
-			os.Exit(1)
+			return fmt.Errorf("issue not found: %s", issueID)
 		}
 
 		issue := resp.Issue
 
 		if jsonOutput {
 			if err := output.PrintJSON(issue); err != nil {
-				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error formatting output: %w", err)
 			}
-			return
+			return nil
 		}
 
 		// Human-readable output
@@ -194,6 +186,7 @@ Examples:
 				fmt.Printf("  - %s\n", label.Name)
 			}
 		}
+		return nil
 	},
 }
 
@@ -205,21 +198,18 @@ var issueCreateCmd = &cobra.Command{
 Examples:
   linear issue create --team ENG --title "Fix bug" --description "Bug details"
   linear issue create --team ENG --title "New feature"`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if issueTitle == "" {
-			fmt.Fprintln(os.Stderr, "Error: --title is required")
-			os.Exit(1)
+			return fmt.Errorf("--title is required")
 		}
 
 		if issueTeamID == "" {
-			fmt.Fprintln(os.Stderr, "Error: --team is required")
-			os.Exit(1)
+			return fmt.Errorf("--team is required")
 		}
 
 		c, err := client.NewClient()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -228,12 +218,10 @@ Examples:
 		// Get team by key to get the team ID
 		teamResp, err := c.GetTeamByKey(ctx, issueTeamID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching team: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error fetching team: %w", err)
 		}
 		if len(teamResp.Teams.Nodes) == 0 {
-			fmt.Fprintf(os.Stderr, "Team not found: %s\n", issueTeamID)
-			os.Exit(1)
+			return fmt.Errorf("team not found: %s", issueTeamID)
 		}
 
 		teamID := teamResp.Teams.Nodes[0].ID
@@ -250,28 +238,24 @@ Examples:
 
 		resp, err := c.CreateIssue(ctx, input)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating issue: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error creating issue: %w", err)
 		}
 
 		if !resp.IssueCreate.Success {
-			fmt.Fprintln(os.Stderr, "Error: Failed to create issue")
-			os.Exit(1)
+			return fmt.Errorf("failed to create issue")
 		}
 
 		if resp.IssueCreate.Issue == nil {
-			fmt.Fprintln(os.Stderr, "Error: Issue was created but no details returned")
-			os.Exit(1)
+			return fmt.Errorf("issue was created but no details returned")
 		}
 
 		issue := resp.IssueCreate.Issue
 
 		if jsonOutput {
 			if err := output.PrintJSON(issue); err != nil {
-				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error formatting output: %w", err)
 			}
-			return
+			return nil
 		}
 
 		// Human-readable output
@@ -279,6 +263,7 @@ Examples:
 		fmt.Printf("ID:    %s\n", issue.Identifier)
 		fmt.Printf("Title: %s\n", issue.Title)
 		fmt.Printf("URL:   %s\n", issue.URL)
+		return nil
 	},
 }
 
