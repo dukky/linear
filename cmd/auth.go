@@ -28,21 +28,19 @@ The key will be stored securely in your system's keyring (macOS Keychain,
 Windows Credential Manager, or Linux Secret Service).
 
 Alternatively, you can set the LINEAR_API_KEY environment variable.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Enter your Linear API key (starts with 'lin_api_'):")
 		fmt.Print("> ")
 
 		apiKeyBytes, err := term.ReadPassword(int(syscall.Stdin))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\nError reading input: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading input: %w", err)
 		}
 		fmt.Println() // Print newline after password input
 
 		apiKey := strings.TrimSpace(string(apiKeyBytes))
 		if apiKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: API key cannot be empty")
-			os.Exit(1)
+			return fmt.Errorf("API key cannot be empty")
 		}
 
 		if !strings.HasPrefix(apiKey, "lin_api_") {
@@ -51,12 +49,12 @@ Alternatively, you can set the LINEAR_API_KEY environment variable.`,
 
 		err = auth.SaveAPIKey(apiKey)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving API key: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error saving API key: %w", err)
 		}
 
 		fmt.Println("\nAuthentication successful!")
 		fmt.Println("Your API key has been stored securely in the system keyring.")
+		return nil
 	},
 }
 
