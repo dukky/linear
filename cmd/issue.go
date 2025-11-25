@@ -41,7 +41,16 @@ Use --all to fetch all issues using pagination.`,
 			os.Exit(1)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		var ctx context.Context
+		var cancel context.CancelFunc
+
+		if fetchAll {
+			// For --all operations, use longer overall timeout to allow pagination
+			ctx, cancel = context.WithTimeout(context.Background(), 10*time.Minute)
+		} else {
+			// For single-page operations, use standard timeout
+			ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+		}
 		defer cancel()
 
 		var issues []client.Issue
