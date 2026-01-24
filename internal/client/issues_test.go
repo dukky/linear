@@ -484,7 +484,7 @@ func TestClient_ListAllIssues(t *testing.T) {
 		endpoint:   server.URL,
 	}
 
-	issues, err := client.ListAllIssues(context.Background(), "")
+	issues, err := client.ListAllIssues(context.Background(), ListIssuesOptions{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
