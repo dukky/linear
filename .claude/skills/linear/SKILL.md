@@ -84,7 +84,7 @@ linear issue list --team ENG --all --json | jq length
 
 ## Reference Values
 
-**state.type**: `triage`, `unstarted`, `started`, `completed`, `canceled`
+**state.type**: `triage`, `backlog`, `unstarted`, `started`, `completed`, `canceled`
 
 **priority**: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low
 
