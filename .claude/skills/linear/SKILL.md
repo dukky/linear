@@ -25,9 +25,9 @@ This skill enables you to interact with Linear (the project management tool) to 
 
 Use the Linear CLI when the user asks you to:
 - List, view, or search for Linear issues
-- Create new issues in Linear
+- Create new issues in Linear (optionally assigned to a project)
 - Check issue status or details
-- List teams in the workspace
+- List teams or projects in the workspace
 - Manage Linear workspace resources
 
 ## Available Commands
@@ -51,6 +51,27 @@ Shows teams in human-readable table format.
 #### List teams as JSON
 ```bash
 linear team list --json
+```
+Returns structured JSON data for programmatic use.
+
+### Project Management
+
+#### List all projects
+```bash
+linear project list
+```
+Shows all projects in your workspace.
+
+#### List projects for a specific team
+```bash
+linear project list --team ENG
+```
+Filter projects by team key.
+
+#### List projects as JSON
+```bash
+linear project list --json
+linear project list --team ENG --json
 ```
 Returns structured JSON data for programmatic use.
 
@@ -108,8 +129,10 @@ Returns structured JSON data.
 ```bash
 linear issue create --team ENG --title "Fix login bug"
 linear issue create --team ENG --title "Add feature" --description "Detailed description here"
+linear issue create --team ENG --title "New task" --project "Mobile App"
+linear issue create --team ENG --title "Another task" --project "4e26961e-967f-458f-8fa2-4240035aa178"
 ```
-Creates a new issue in the specified team.
+Creates a new issue in the specified team, optionally assigned to a project.
 
 **Required parameters:**
 - `--team TEAM_KEY`: The team where the issue should be created
@@ -117,6 +140,7 @@ Creates a new issue in the specified team.
 
 **Optional parameters:**
 - `--description "DESC"`: Issue description (supports markdown)
+- `--project "PROJECT"`: Project name or UUID to assign the issue to
 
 #### Create issue and get JSON response
 ```bash
@@ -182,6 +206,14 @@ All commands support two output formats:
 }
 ```
 
+### Project Object (JSON)
+```json
+{
+  "id": "uuid",
+  "name": "Mobile App"
+}
+```
+
 ## Usage Examples
 
 ### Example 1: List issues for a team
@@ -204,7 +236,18 @@ When the user asks: "Create a new issue in PROD to update the documentation"
 - Include relevant details in title and description
 - Return the created issue details
 
-### Example 3: View issue details
+### Example 3: Create an issue in a project
+```bash
+linear issue create --team ENG --title "Add login screen" --project "Mobile App" --json
+```
+
+When the user asks: "Create a new issue in the Mobile App project"
+- First, if needed, list available projects: `linear project list --team ENG --json`
+- Use the `linear issue create` command with the `--project` flag
+- The project can be specified by name or UUID
+- Return the created issue details
+
+### Example 4: View issue details
 ```bash
 linear issue view ENG-123 --json
 ```
@@ -214,7 +257,7 @@ When the user asks: "What's the status of ENG-123?"
 - Parse the JSON to extract relevant information (state, assignee, priority)
 - Present the key details clearly
 
-### Example 4: Search for specific issues
+### Example 5: Search for specific issues
 ```bash
 linear issue list --team ENG --all --json
 ```
@@ -225,7 +268,18 @@ When the user asks: "Find all bugs in the Engineering team"
 - Filter the results by looking at labels or title
 - Present matching issues
 
-### Example 5: Get a quick overview of recent issues
+### Example 6: Find issues in a project
+```bash
+linear issue list --team ENG --all --json
+```
+
+When the user asks: "Show me issues in the Mobile App project"
+- List issues with `--json` flag (use `--all` for complete list)
+- Filter results by the `project.name` field in the JSON output
+- Each issue's JSON includes a `project` object with `id` and `name`
+- Present matching issues
+
+### Example 7: Get a quick overview of recent issues
 ```bash
 linear issue list --team ENG --limit 5 --json
 ```
@@ -234,7 +288,7 @@ When the user asks: "What are the latest issues in the ENG team?"
 - Use `--limit 5` to get just the most recent issues
 - Parse and present them clearly
 
-### Example 6: Count total issues
+### Example 8: Count total issues
 ```bash
 linear issue list --team ENG --all --json
 ```
@@ -249,9 +303,10 @@ When the user asks: "How many issues does the ENG team have?"
 1. **Authentication**: Always check auth status first if you encounter authentication errors
 2. **Team Keys**: Team keys are short codes (e.g., ENG, PROD), not full team names
 3. **Issue Identifiers**: Can use either human-readable IDs (ENG-123) or UUIDs
-4. **JSON Parsing**: When using `--json`, always parse the output as JSON for accurate data extraction
-5. **Rate Limits**: Be mindful of API rate limits when making multiple requests
-6. **Error Handling**: If a command fails, check the error message and suggest solutions
+4. **Project Identifiers**: Projects can be specified by name or UUID when creating issues
+5. **JSON Parsing**: When using `--json`, always parse the output as JSON for accurate data extraction
+6. **Rate Limits**: Be mindful of API rate limits when making multiple requests
+7. **Error Handling**: If a command fails, check the error message and suggest solutions
 
 ## Troubleshooting
 
@@ -268,6 +323,11 @@ When the user asks: "How many issues does the ENG team have?"
 - Verify the issue identifier is correct
 - Check if you have access to that issue/team
 
+### "Error fetching project"
+- List available projects: `linear project list --team TEAM_KEY`
+- Verify the project name or UUID is correct
+- Check if the project belongs to the specified team
+
 ## Best Practices for Claude Code
 
 1. **Use JSON by default** when you need to parse data or extract specific information
@@ -280,6 +340,7 @@ When the user asks: "How many issues does the ENG team have?"
    - Use `--limit N` for quick overviews (e.g., `--limit 5` for recent issues)
    - Use `--all` when you need the complete list (counting, searching across all issues)
 7. **Quote strings** with spaces in bash commands (e.g., `--title "Multi word title"`)
+8. **Validate project names** by listing projects first if unsure (`linear project list --team TEAM_KEY`)
 
 ## Security Notes
 
