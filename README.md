@@ -169,21 +169,19 @@ linear issue create --team ENG --title "Bug fix" --json
 
 ## Claude Code Integration
 
-This CLI is designed to work seamlessly with Claude Code through a built-in skill that enables automatic tool calling.
+This CLI is designed to work seamlessly with Claude Code through a skill that enables automatic tool calling.
 
-### Using the Claude Code Skill
+### Install the Claude Code Skill
 
-This repository includes a Claude Code skill (`.claude/skills/linear/SKILL.md`) that teaches Claude how to use the Linear CLI automatically. When you open this repository in Claude Code, it will automatically detect and load the skill.
+Run this to install the skill globally (works in any project):
 
-**What this enables:**
-- Ask Claude to list issues: "Show me all issues in the ENG team"
-- Create issues naturally: "Create a bug report for the login issue in PROD"
-- View issue details: "What's the status of ENG-123?"
-- Get team information: "List all teams in the workspace"
+```bash
+curl -fsSL https://raw.githubusercontent.com/dukky/linear-cli/master/install-skill.sh | bash
+```
 
-Claude will automatically invoke the appropriate CLI commands and parse the results for you.
+This installs the skill to `~/.claude/skills/linear/SKILL.md`. Run the same command to update.
 
-### Setup for Claude Code
+### Setup
 
 1. **Install the Linear CLI**:
    ```bash
@@ -195,9 +193,18 @@ Claude will automatically invoke the appropriate CLI commands and parse the resu
    linear auth login
    ```
 
-3. **Open this repository in Claude Code** - the skill will be automatically loaded
+3. **Install the skill** (see above)
 
 That's it! Claude will now be able to interact with Linear on your behalf.
+
+### What this enables
+
+- Ask Claude to list issues: "Show me all issues in the ENG team"
+- Create issues naturally: "Create a bug report for the login issue in PROD"
+- View issue details: "What's the status of ENG-123?"
+- Get team information: "List all teams in the workspace"
+
+Claude will automatically invoke the appropriate CLI commands and parse the results for you.
 
 ### Manual Usage Examples
 
