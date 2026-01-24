@@ -12,13 +12,14 @@ import (
 )
 
 var (
-	teamFilter           string
-	issueTitle           string
-	issueDesc            string
-	issueTeamID          string
+	teamFilter             string
+	projectFilter          string
+	issueTitle             string
+	issueDesc              string
+	issueTeamID            string
 	issueProjectIdentifier string
-	issueLimit           int
-	fetchAll             bool
+	issueLimit             int
+	fetchAll               bool
 )
 
 var issueCmd = &cobra.Command{
@@ -33,6 +34,7 @@ var issueListCmd = &cobra.Command{
 	Long: `List issues in your Linear workspace.
 
 Use --team to filter by team key (e.g., --team ENG).
+Use --project to filter by project name or ID.
 Use --limit to specify the number of issues to fetch (default: 50).
 Use --all to fetch all issues using pagination.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -45,11 +47,44 @@ Use --all to fetch all issues using pagination.`,
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
+		// Resolve project filter if specified
+		var projectID string
+		if projectFilter != "" {
+			// Get team ID for scoping project lookup (if team filter provided)
+			var teamID string
+			if teamFilter != "" {
+				teamResp, err := c.GetTeamByKey(ctx, teamFilter)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error fetching team: %v\n", err)
+					os.Exit(1)
+				}
+				if len(teamResp.Teams.Nodes) == 0 {
+					fmt.Fprintf(os.Stderr, "Team not found: %s\n", teamFilter)
+					os.Exit(1)
+				}
+				teamID = teamResp.Teams.Nodes[0].ID
+			}
+
+			project, err := c.GetProjectByIdentifier(ctx, projectFilter, teamID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fetching project: %v\n", err)
+				fmt.Fprintln(os.Stderr, "Tip: Run 'linear project list' to see available projects")
+				os.Exit(1)
+			}
+			projectID = project.ID
+		}
+
 		var issues []client.Issue
+
+		opts := client.ListIssuesOptions{
+			TeamKey:   teamFilter,
+			ProjectID: projectID,
+			Limit:     issueLimit,
+		}
 
 		if fetchAll {
 			// Fetch all issues using pagination
-			allIssues, err := c.ListAllIssues(ctx, teamFilter)
+			allIssues, err := c.ListAllIssues(ctx, opts)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
 				os.Exit(1)
@@ -57,10 +92,6 @@ Use --all to fetch all issues using pagination.`,
 			issues = allIssues
 		} else {
 			// Fetch with specified limit
-			opts := client.ListIssuesOptions{
-				TeamKey: teamFilter,
-				Limit:   issueLimit,
-			}
 			resp, err := c.ListIssues(ctx, opts)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
@@ -302,6 +333,7 @@ Examples:
 
 func init() {
 	issueListCmd.Flags().StringVar(&teamFilter, "team", "", "Filter by team key (e.g., ENG)")
+	issueListCmd.Flags().StringVar(&projectFilter, "project", "", "Filter by project name or ID")
 	issueListCmd.Flags().IntVar(&issueLimit, "limit", 50, "Maximum number of issues to fetch (default: 50)")
 	issueListCmd.Flags().BoolVar(&fetchAll, "all", false, "Fetch all issues using pagination")
 

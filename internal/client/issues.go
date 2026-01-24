@@ -72,9 +72,10 @@ type IssueResponse struct {
 
 // ListIssuesOptions contains options for listing issues
 type ListIssuesOptions struct {
-	TeamKey string
-	Limit   int
-	After   string
+	TeamKey   string
+	ProjectID string
+	Limit     int
+	After     string
 }
 
 // ListIssues retrieves issues with optional team filter and pagination
@@ -141,14 +142,27 @@ func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*Issue
 		vars["after"] = opts.After
 	}
 
+	// Build filter with optional team and project constraints
+	filter := map[string]interface{}{}
+
 	if opts.TeamKey != "" {
-		vars["filter"] = map[string]interface{}{
-			"team": map[string]interface{}{
-				"key": map[string]interface{}{
-					"eq": opts.TeamKey,
-				},
+		filter["team"] = map[string]interface{}{
+			"key": map[string]interface{}{
+				"eq": opts.TeamKey,
 			},
 		}
+	}
+
+	if opts.ProjectID != "" {
+		filter["project"] = map[string]interface{}{
+			"id": map[string]interface{}{
+				"eq": opts.ProjectID,
+			},
+		}
+	}
+
+	if len(filter) > 0 {
+		vars["filter"] = filter
 	}
 
 	var resp IssuesResponse
@@ -160,12 +174,9 @@ func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*Issue
 }
 
 // ListAllIssues retrieves all issues using cursor-based pagination
-func (c *Client) ListAllIssues(ctx context.Context, teamKey string) ([]Issue, error) {
+func (c *Client) ListAllIssues(ctx context.Context, opts ListIssuesOptions) ([]Issue, error) {
 	var allIssues []Issue
-	opts := ListIssuesOptions{
-		TeamKey: teamKey,
-		Limit:   100, // Use larger page size for efficiency
-	}
+	opts.Limit = 100 // Use larger page size for efficiency
 
 	for {
 		resp, err := c.ListIssues(ctx, opts)
