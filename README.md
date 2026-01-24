@@ -26,7 +26,7 @@ This will install the `linear` binary to your `$GOBIN` directory (typically `~/g
 
 ```bash
 git clone https://github.com/dukky/linear.git
-cd linear-cli
+cd linear
 go build -o linear
 sudo mv linear /usr/local/bin/  # Optional: move to PATH
 ```
@@ -333,7 +333,7 @@ linear issue list --all --json | jq 'length'  # Count total issues
 ```bash
 # Clone the repository
 git clone https://github.com/dukky/linear.git
-cd linear-cli
+cd linear
 
 # Install dependencies
 go mod download
