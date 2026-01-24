@@ -173,13 +173,14 @@ This CLI is designed to work seamlessly with Claude Code through a skill that en
 
 ### Install the Claude Code Skill
 
-Run this to install the skill globally (works in any project):
+From the repo, copy the skill to your global Claude skills directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dukky/linear-cli/master/install-skill.sh | bash
+mkdir -p ~/.claude/skills/linear
+cp .claude/skills/linear/SKILL.md ~/.claude/skills/linear/
 ```
 
-This installs the skill to `~/.claude/skills/linear/SKILL.md`. Run the same command to update.
+Run the same commands to update after pulling new changes.
 
 ### Setup
 
