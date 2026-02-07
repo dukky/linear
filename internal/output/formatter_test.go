@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestPrintJSON(t *testing.T) {
@@ -142,6 +143,36 @@ func TestTruncateString(t *testing.T) {
 			maxLen: 10,
 			want:   "",
 		},
+		{
+			name:   "zero max length",
+			input:  "hello",
+			maxLen: 0,
+			want:   "",
+		},
+		{
+			name:   "negative max length",
+			input:  "hello",
+			maxLen: -2,
+			want:   "",
+		},
+		{
+			name:   "unicode emoji truncation",
+			input:  "hello🙂world",
+			maxLen: 8,
+			want:   "hello...",
+		},
+		{
+			name:   "unicode accented truncation",
+			input:  "café résumé",
+			maxLen: 8,
+			want:   "café...",
+		},
+		{
+			name:   "unicode cjk truncation",
+			input:  "多言語サポート対応",
+			maxLen: 6,
+			want:   "多言語...",
+		},
 	}
 
 	for _, tt := range tests {
@@ -149,6 +180,9 @@ func TestTruncateString(t *testing.T) {
 			got := TruncateString(tt.input, tt.maxLen)
 			if got != tt.want {
 				t.Errorf("TruncateString() = %q, want %q", got, tt.want)
+			}
+			if !utf8.ValidString(got) {
+				t.Errorf("TruncateString() produced invalid UTF-8: %q", got)
 			}
 		})
 	}
@@ -203,6 +237,12 @@ func TestFormatMultilineString(t *testing.T) {
 			maxLen: 10,
 			want:   "",
 		},
+		{
+			name:   "unicode multiline and truncate",
+			input:  "hello\n🙂\n世界 and more text",
+			maxLen: 10,
+			want:   "hello 🙂...",
+		},
 	}
 
 	for _, tt := range tests {
@@ -210,6 +250,9 @@ func TestFormatMultilineString(t *testing.T) {
 			got := FormatMultilineString(tt.input, tt.maxLen)
 			if got != tt.want {
 				t.Errorf("FormatMultilineString() = %q, want %q", got, tt.want)
+			}
+			if !utf8.ValidString(got) {
+				t.Errorf("FormatMultilineString() produced invalid UTF-8: %q", got)
 			}
 		})
 	}

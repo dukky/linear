@@ -65,13 +65,20 @@ func (t *Table) PrintTo(w io.Writer) {
 
 // TruncateString truncates a string to the specified length
 func TruncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if maxLen <= 0 {
+		return ""
+	}
+
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
+
 	if maxLen <= 3 {
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-	return s[:maxLen-3] + "..."
+
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // FormatMultilineString formats a multiline string for table display
