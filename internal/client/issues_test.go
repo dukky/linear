@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -503,5 +504,49 @@ func TestClient_ListAllIssues(t *testing.T) {
 
 	if issues[1].Identifier != "TEST-2" {
 		t.Errorf("Expected second issue identifier 'TEST-2', got '%s'", issues[1].Identifier)
+	}
+}
+
+func TestNextPageCursor_EmptyEndCursor(t *testing.T) {
+	_, _, err := nextPageCursor("", PageInfo{
+		HasNextPage: true,
+		EndCursor:   "",
+	})
+	if err == nil {
+		t.Fatal("Expected error when hasNextPage is true and endCursor is empty")
+	}
+
+	if !strings.Contains(err.Error(), "endCursor is empty") {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestNextPageCursor_UnchangedCursor(t *testing.T) {
+	_, _, err := nextPageCursor("cursor-1", PageInfo{
+		HasNextPage: true,
+		EndCursor:   "cursor-1",
+	})
+	if err == nil {
+		t.Fatal("Expected error when endCursor does not advance")
+	}
+
+	if !strings.Contains(err.Error(), "did not advance") {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestNextPageCursor_NoNextPage(t *testing.T) {
+	cursor, hasNext, err := nextPageCursor("cursor-1", PageInfo{
+		HasNextPage: false,
+		EndCursor:   "cursor-2",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if hasNext {
+		t.Fatal("Expected hasNext to be false")
+	}
+	if cursor != "" {
+		t.Errorf("Expected empty cursor, got %q", cursor)
 	}
 }

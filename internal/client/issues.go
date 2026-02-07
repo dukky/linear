@@ -1,6 +1,9 @@
 package client
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Issue represents a Linear issue
 type Issue struct {
@@ -186,14 +189,35 @@ func (c *Client) ListAllIssues(ctx context.Context, opts ListIssuesOptions) ([]I
 
 		allIssues = append(allIssues, resp.Issues.Nodes...)
 
-		if !resp.Issues.PageInfo.HasNextPage {
+		nextCursor, hasNextPage, err := nextPageCursor(opts.After, resp.Issues.PageInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		if !hasNextPage {
 			break
 		}
 
-		opts.After = resp.Issues.PageInfo.EndCursor
+		opts.After = nextCursor
 	}
 
 	return allIssues, nil
+}
+
+func nextPageCursor(currentCursor string, pageInfo PageInfo) (string, bool, error) {
+	if !pageInfo.HasNextPage {
+		return "", false, nil
+	}
+
+	if pageInfo.EndCursor == "" {
+		return "", false, fmt.Errorf("pagination error: hasNextPage is true but endCursor is empty")
+	}
+
+	if pageInfo.EndCursor == currentCursor {
+		return "", false, fmt.Errorf("pagination error: endCursor did not advance")
+	}
+
+	return pageInfo.EndCursor, true, nil
 }
 
 // GetIssue retrieves a single issue by ID or identifier

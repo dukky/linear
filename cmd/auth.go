@@ -11,6 +11,8 @@ import (
 	"golang.org/x/term"
 )
 
+var getAuthStatus = auth.GetAuthStatus
+
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage authentication",
@@ -65,13 +67,16 @@ var authStatusCmd = &cobra.Command{
 	Short: "Show authentication status",
 	Long:  "Display current authentication status and source (keyring or environment variable)",
 	Run: func(cmd *cobra.Command, args []string) {
-		source, authenticated := auth.GetAuthStatus()
+		source, authenticated := getAuthStatus()
 
 		if authenticated {
 			fmt.Printf("Status: Authenticated\n")
 			fmt.Printf("Source: %s\n", source)
 		} else {
 			fmt.Printf("Status: Not authenticated\n")
+			if source != "Not authenticated" {
+				fmt.Printf("Details: %s\n", source)
+			}
 			fmt.Println("\nTo authenticate, run: linear auth login")
 			fmt.Println("Or set the LINEAR_API_KEY environment variable")
 		}

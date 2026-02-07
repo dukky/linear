@@ -214,7 +214,7 @@ func TestIsUUID(t *testing.T) {
 		{"896bdb2d-89f6-43e0-a7e3-b95920249228", true},
 		{"Mobile App", false},
 		{"not-a-uuid", false},
-		{"4e26961e967f458f8fa24240035aa178", false}, // no dashes
+		{"4e26961e967f458f8fa24240035aa178", false},    // no dashes
 		{"4e26961e-967f-458f-8fa2-4240035aa17", false}, // too short
 		{"", false},
 	}
@@ -224,5 +224,33 @@ func TestIsUUID(t *testing.T) {
 		if result != test.expected {
 			t.Errorf("isUUID(%s) = %v, expected %v", test.input, result, test.expected)
 		}
+	}
+}
+
+func TestSelectProjectByIdentifier_ExactMatchPreferred(t *testing.T) {
+	projects := []Project{
+		{ID: "proj-1", Name: "Mobile Platform"},
+		{ID: "proj-2", Name: "Mobile"},
+	}
+
+	project, err := selectProjectByIdentifier("mobile", projects)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if project.ID != "proj-2" {
+		t.Errorf("Expected exact match project ID to be 'proj-2', got '%s'", project.ID)
+	}
+}
+
+func TestSelectProjectByIdentifier_AmbiguousPartialMatch(t *testing.T) {
+	projects := []Project{
+		{ID: "proj-1", Name: "Mobile App"},
+		{ID: "proj-2", Name: "Mobile Platform"},
+	}
+
+	_, err := selectProjectByIdentifier("Mobile", projects)
+	if err == nil {
+		t.Fatal("Expected ambiguity error, got nil")
 	}
 }

@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // ProjectsResponse is the response for listing projects
@@ -70,6 +71,8 @@ func (c *Client) GetProjectsByTeam(ctx context.Context, teamID string) (*Project
 // If teamID is provided, it filters projects by team to reduce ambiguity
 // Returns the first matching project
 func (c *Client) GetProjectByIdentifier(ctx context.Context, identifier string, teamID string) (*Project, error) {
+	identifier = strings.TrimSpace(identifier)
+
 	// Check if identifier looks like a UUID (basic check)
 	if isUUID(identifier) {
 		// If it's a UUID, query by ID
@@ -144,8 +147,56 @@ func (c *Client) GetProjectByIdentifier(ctx context.Context, identifier string, 
 		return nil, fmt.Errorf("project not found: %s", identifier)
 	}
 
-	// Return first match
-	return &resp.Projects.Nodes[0], nil
+	return selectProjectByIdentifier(identifier, resp.Projects.Nodes)
+}
+
+func selectProjectByIdentifier(identifier string, projects []Project) (*Project, error) {
+	if len(projects) == 0 {
+		return nil, fmt.Errorf("project not found: %s", identifier)
+	}
+
+	var exactMatches []*Project
+	for i := range projects {
+		if strings.EqualFold(projects[i].Name, identifier) {
+			exactMatches = append(exactMatches, &projects[i])
+		}
+	}
+
+	if len(exactMatches) == 1 {
+		return exactMatches[0], nil
+	}
+
+	if len(exactMatches) > 1 {
+		return nil, fmt.Errorf(
+			"ambiguous project identifier %q: multiple exact matches found: %s; use project UUID instead",
+			identifier,
+			projectCandidates(exactMatches),
+		)
+	}
+
+	if len(projects) == 1 {
+		return &projects[0], nil
+	}
+
+	projectPtrs := make([]*Project, 0, len(projects))
+	for i := range projects {
+		projectPtrs = append(projectPtrs, &projects[i])
+	}
+
+	return nil, fmt.Errorf(
+		"ambiguous project identifier %q: matched %d projects: %s; use exact project name or project UUID",
+		identifier,
+		len(projects),
+		projectCandidates(projectPtrs),
+	)
+}
+
+func projectCandidates(projects []*Project) string {
+	candidates := make([]string, 0, len(projects))
+	for _, project := range projects {
+		candidates = append(candidates, fmt.Sprintf("%s (%s)", project.Name, project.ID))
+	}
+	return strings.Join(candidates, ", ")
 }
 
 // isUUID checks if a string looks like a UUID
