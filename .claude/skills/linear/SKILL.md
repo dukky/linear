@@ -104,6 +104,9 @@ linear issue list --team ENG --all --json | jq length
 **"Failed to get Linear API key"**
 - Run `linear auth login` or set `LINEAR_API_KEY` env var
 
+**"Need to change API key"**
+- Run `linear auth logout` to remove and then `linear auth login`, or set new `LINEAR_API_KEY` env var
+
 **"Team not found"**
 - Use team key (e.g., `ENG`), not full name. Check `linear team list`
 

@@ -6,7 +6,10 @@ import (
 	"testing"
 
 	"github.com/99designs/keyring"
+	"github.com/stretchr/testify/require"
 )
+
+var _ KeyringProvider = (*mockKeyringProvider)(nil)
 
 // mockKeyringProvider is a mock implementation of KeyringProvider for testing
 type mockKeyringProvider struct {
@@ -33,6 +36,16 @@ func (m *mockKeyringProvider) Set(item keyring.Item) error {
 		m.items = make(map[string]keyring.Item)
 	}
 	m.items[item.Key] = item
+	return nil
+}
+
+func (m *mockKeyringProvider) Remove(key string) error {
+	if m.err != nil {
+		return m.err
+	}
+
+	delete(m.items, key)
+
 	return nil
 }
 
@@ -327,6 +340,68 @@ func TestSaveAPIKey_KeyringError(t *testing.T) {
 	if err != nil && !contains(err.Error(), "failed to access keyring") {
 		t.Errorf("Expected error to contain 'failed to access keyring', got '%s'", err.Error())
 	}
+}
+
+func TestRemoveAPIKey(t *testing.T) {
+
+	// Save original keyring opener, restore after test
+	originalOpener := keyringOpener
+	defer func() {
+		keyringOpener = originalOpener
+	}()
+
+	// Set up mock keyring
+	mock := &mockKeyringProvider{
+		items: make(map[string]keyring.Item),
+	}
+	keyringOpener = func() (KeyringProvider, error) {
+		return mock, nil
+	}
+
+	testAPIKey := "test-api-key-to-save"
+	err := SaveAPIKey(testAPIKey)
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	// Now delete the key
+	removed, err := RemoveAPIKey()
+	require.NoError(t, err)
+	require.True(t, removed)
+
+	// Assert key is not in the ring
+	key, err := GetAPIKey()
+	require.Empty(t, key)
+	require.Error(t, err)
+	require.EqualError(t, err, "no API key found. Run 'linear auth login' or set LINEAR_API_KEY environment variable")
+}
+
+func TestRemoveAPIKey_NotSetIdempotent(t *testing.T) {
+	// Save original keyring opener, restore after test
+	originalOpener := keyringOpener
+	defer func() {
+		keyringOpener = originalOpener
+	}()
+
+	// Set up mock keyring
+	mock := &mockKeyringProvider{
+		err: keyring.ErrKeyNotFound,
+	}
+	keyringOpener = func() (KeyringProvider, error) {
+		return mock, nil
+	}
+
+	// Delete the key without setting
+	removed, err := RemoveAPIKey()
+	require.NoError(t, err)
+	require.False(t, removed)
+
+	// Assert key is not in the ring
+	key, err := GetAPIKey()
+	require.Empty(t, key)
+	require.Error(t, err)
+	require.EqualError(t, err, "no API key found. Run 'linear auth login' or set LINEAR_API_KEY environment variable")
 }
 
 func TestConstants(t *testing.T) {

@@ -11,7 +11,10 @@ import (
 	"golang.org/x/term"
 )
 
-var getAuthStatus = auth.GetAuthStatus
+var (
+	getAuthStatus = auth.GetAuthStatus
+	removeAPIKey  = auth.RemoveAPIKey
+)
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
@@ -83,8 +86,28 @@ var authStatusCmd = &cobra.Command{
 	},
 }
 
+var authLogoutCmd = &cobra.Command{
+	Use:   "logout",
+	Short: "Clear stored authentication",
+	Long:  "Remove stored API key from the system keyring. Environment variable LINEAR_API_KEY is unaffected",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("Removing your saved API key from keyring...")
+		removed, err := removeAPIKey()
+		if err != nil {
+			return fmt.Errorf("error removing API key: %w", err)
+		}
+		if removed {
+			fmt.Println("Stored key removed from keyring.")
+		} else {
+			fmt.Println("No API key set, exiting...")
+		}
+		return nil
+	},
+}
+
 func init() {
 	authCmd.AddCommand(authLoginCmd)
 	authCmd.AddCommand(authStatusCmd)
+	authCmd.AddCommand(authLogoutCmd)
 	rootCmd.AddCommand(authCmd)
 }

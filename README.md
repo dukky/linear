@@ -96,6 +96,13 @@ Check your current authentication status.
 linear auth status
 ```
 
+#### `linear auth logout`
+Remove your Linear API key from the system keyring. Note: `LINEAR_API_KEY` environment variable will be unaffected if set
+
+```bash
+linear auth logout
+```
+
 ### Team Commands
 
 #### `linear team list`

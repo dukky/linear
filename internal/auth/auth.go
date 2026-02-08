@@ -18,7 +18,11 @@ const (
 type KeyringProvider interface {
 	Get(key string) (keyring.Item, error)
 	Set(item keyring.Item) error
+	Remove(key string) error
 }
+
+// Assert that defaultKeyringProvider implements KeyringProvider
+var _ KeyringProvider = (*defaultKeyringProvider)(nil)
 
 // defaultKeyringProvider wraps the actual keyring.Keyring
 type defaultKeyringProvider struct {
@@ -31,6 +35,10 @@ func (p *defaultKeyringProvider) Get(key string) (keyring.Item, error) {
 
 func (p *defaultKeyringProvider) Set(item keyring.Item) error {
 	return p.ring.Set(item)
+}
+
+func (p *defaultKeyringProvider) Remove(key string) error {
+	return p.ring.Remove(key)
 }
 
 // keyringOpener is a function type for opening keyrings (allows testing)
@@ -84,6 +92,21 @@ func SaveAPIKey(apiKey string) error {
 	}
 
 	return nil
+}
+
+// RemoveAPIKey removes the API key from the system keyring
+func RemoveAPIKey() (bool, error) {
+	ring, err := keyringOpener()
+	if err != nil {
+		return false, fmt.Errorf("failed to access keyring: %w", err)
+	}
+	if err := ring.Remove(keyringKey); err != nil {
+		if errors.Is(err, keyring.ErrKeyNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to remove API key from keyring: %w", err)
+	}
+	return true, nil
 }
 
 // GetAuthStatus returns information about the current authentication status

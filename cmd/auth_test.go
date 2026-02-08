@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -77,5 +78,66 @@ func TestAuthStatus_UnauthenticatedShowsDetails(t *testing.T) {
 	}
 	if !strings.Contains(output, "Details: Error accessing keyring: backend unavailable") {
 		t.Fatalf("expected details line, got %q", output)
+	}
+}
+
+func TestAuthLogout_RemovesAuth(t *testing.T) {
+	originalRemoveAPIKey := removeAPIKey
+	t.Cleanup(func() {
+		removeAPIKey = originalRemoveAPIKey
+	})
+
+	removeAPIKey = func() (bool, error) {
+		return true, nil
+	}
+
+	output := captureStdout(t, func() {
+		if err := authLogoutCmd.RunE(authLogoutCmd, nil); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Stored key removed from keyring.") {
+		t.Fatalf("expected success line, got %q", output)
+	}
+}
+
+func TestAuthLogout_RemovesAuth_NotSetIdempotent(t *testing.T) {
+	originalRemoveAPIKey := removeAPIKey
+	t.Cleanup(func() {
+		removeAPIKey = originalRemoveAPIKey
+	})
+
+	removeAPIKey = func() (bool, error) {
+		return false, nil
+	}
+
+	output := captureStdout(t, func() {
+		if err := authLogoutCmd.RunE(authLogoutCmd, nil); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "No API key set, exiting...") {
+		t.Fatalf("expected success line, got %q", output)
+	}
+}
+
+func TestAuthLogout_RemovesAuth_Error(t *testing.T) {
+	originalRemoveAPIKey := removeAPIKey
+	t.Cleanup(func() {
+		removeAPIKey = originalRemoveAPIKey
+	})
+
+	removeAPIKey = func() (bool, error) {
+		return false, errors.New("Unable to remove API key")
+	}
+
+	err := authLogoutCmd.RunE(authLogoutCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "error removing API key: Unable to remove API key") {
+		t.Fatalf("unexpected error, got %q", err.Error())
 	}
 }
