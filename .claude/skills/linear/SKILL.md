@@ -17,6 +17,7 @@ Manage Linear issues, teams, and projects from the command line.
 | List issues | `linear issue list [--team KEY] [--project NAME] [--limit N] [--all] [--json]` |
 | View issue | `linear issue view ID [--json]` |
 | Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--json]` |
+| Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--json]` |
 | List teams | `linear team list [--json]` |
 | List projects | `linear project list [--team KEY] [--json]` |
 | Auth status | `linear auth status` |
@@ -72,6 +73,16 @@ linear issue list --project "Mobile App" --all --json
 linear issue create --team ENG --title "Add feature" --project "Mobile App" --json
 ```
 
+**Update issue title and priority:**
+```bash
+linear issue update ENG-123 --title "Refine onboarding copy" --priority 2 --json
+```
+
+**Move issue to another project:**
+```bash
+linear issue update ENG-123 --project "Q2 Goals" --json
+```
+
 **View issue details:**
 ```bash
 linear issue view ENG-123 --json
@@ -102,3 +113,4 @@ linear issue list --team ENG --all --json | jq length
 **"Error fetching project"**
 - Check available projects: `linear project list --team KEY`
 - Project names are matched case-insensitively
+- If multiple projects match, use exact name or UUID to disambiguate

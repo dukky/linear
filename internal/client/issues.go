@@ -332,3 +332,54 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (*Crea
 
 	return &resp, nil
 }
+
+// UpdateIssueInput represents the input for updating an issue.
+// Pointer fields allow callers to distinguish unset vs empty values.
+type UpdateIssueInput struct {
+	Title       *string `json:"title,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Priority    *int    `json:"priority,omitempty"`
+	ProjectID   *string `json:"projectId,omitempty"`
+}
+
+// UpdateIssueResponse is the response for updating an issue
+type UpdateIssueResponse struct {
+	IssueUpdate struct {
+		Success bool `json:"success"`
+		Issue   *struct {
+			ID         string `json:"id"`
+			Identifier string `json:"identifier"`
+			Title      string `json:"title"`
+			URL        string `json:"url"`
+		} `json:"issue"`
+	} `json:"issueUpdate"`
+}
+
+// UpdateIssue updates an existing issue
+func (c *Client) UpdateIssue(ctx context.Context, id string, input UpdateIssueInput) (*UpdateIssueResponse, error) {
+	query := `
+		mutation($id: String!, $input: IssueUpdateInput!) {
+			issueUpdate(id: $id, input: $input) {
+				success
+				issue {
+					id
+					identifier
+					title
+					url
+				}
+			}
+		}
+	`
+
+	vars := map[string]interface{}{
+		"id":    id,
+		"input": input,
+	}
+
+	var resp UpdateIssueResponse
+	if err := c.Do(ctx, query, vars, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}

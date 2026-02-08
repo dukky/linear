@@ -8,6 +8,7 @@ A command-line interface for Linear issue tracking, designed for seamless integr
 - 📋 List and filter issues by team
 - 👁️ View detailed issue information
 - ✨ Create new issues
+- 🛠️ Update existing issues
 - 👥 Manage teams
 - 📊 Multiple output formats (human-readable tables and JSON)
 - 🤖 Perfect for automation and Claude Code integration
@@ -167,6 +168,26 @@ linear issue create \
 linear issue create --team ENG --title "Bug fix" --json
 ```
 
+#### `linear issue update <issue-id>`
+Update fields on an existing issue.
+
+```bash
+# Update title
+linear issue update ENG-123 --title "Updated issue title"
+
+# Update priority (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low)
+linear issue update ENG-123 --priority 2
+
+# Move issue to another project
+linear issue update ENG-123 --project "Mobile App"
+
+# Clear description
+linear issue update ENG-123 --description ""
+
+# JSON output
+linear issue update ENG-123 --title "Updated issue title" --json
+```
+
 ## Claude Code Integration
 
 This CLI is designed to work seamlessly with Claude Code through a skill that enables automatic tool calling.
@@ -202,6 +223,7 @@ That's it! Claude will now be able to interact with Linear on your behalf.
 
 - Ask Claude to list issues: "Show me all issues in the ENG team"
 - Create issues naturally: "Create a bug report for the login issue in PROD"
+- Update issues naturally: "Update ENG-123 priority to high and change the title"
 - View issue details: "What's the status of ENG-123?"
 - Get team information: "List all teams in the workspace"
 
@@ -257,7 +279,7 @@ The CLI checks for credentials in the following order:
 
 ## Output Formats
 
-All list and view commands support both human-readable table output (default) and JSON output (with `--json` flag).
+All issue, team, and project commands support both human-readable output (default) and JSON output (with `--json` flag).
 
 ### Human-Readable Output (Default)
 

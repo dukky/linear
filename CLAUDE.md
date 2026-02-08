@@ -53,7 +53,7 @@ sudo mv linear /usr/local/bin/
 **`cmd/`** - Cobra CLI commands
 - `root.go` - Root command and global `--json` flag
 - `auth.go` - Authentication commands (login, status)
-- `issue.go` - Issue commands (list, view, create)
+- `issue.go` - Issue commands (list, view, create, update)
 - `team.go` - Team commands (list)
 
 **`internal/auth/`** - Authentication and credential management
@@ -140,6 +140,7 @@ Always use `--json` flag when programmatically parsing output:
 - `linear issue list --team ENG --json`
 - `linear issue view ENG-123 --json`
 - `linear issue create --team ENG --title "..." --description "..." --json`
+- `linear issue update ENG-123 --title "..." --priority 2 --json`
 
 ### Team Keys vs Names
 - Commands use **team keys** (short codes like "ENG", "PROD"), not full names
@@ -170,6 +171,13 @@ Creating issues requires two steps:
 2. Create issue with team ID via `CreateIssue()`
 
 Team keys (e.g., "ENG") must be resolved to UUIDs before creating issues.
+
+### Issue Update Flow
+Updating issues may involve project resolution:
+1. Build update input from changed flags (`title`, `description`, `priority`, `project`)
+2. If `project` is set, fetch issue via `GetIssue()` to scope project lookup by team
+3. Resolve project using `GetProjectByIdentifier()`
+4. Update issue via `UpdateIssue()`
 
 ### Output Formatting
 - **Table format**: Uses `text/tabwriter` for aligned columns

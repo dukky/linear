@@ -272,6 +272,117 @@ func TestClient_CreateIssue_Error(t *testing.T) {
 	}
 }
 
+func TestClient_UpdateIssue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		if !strings.Contains(req.Query, "issueUpdate") {
+			t.Errorf("Expected issueUpdate mutation, got query: %s", req.Query)
+		}
+
+		input, ok := req.Variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected input object in variables, got %T", req.Variables["input"])
+		}
+
+		if req.Variables["id"] != "TEST-123" {
+			t.Errorf("Expected id to be TEST-123, got %v", req.Variables["id"])
+		}
+		if input["title"] != "Updated title" {
+			t.Errorf("Expected title to be Updated title, got %v", input["title"])
+		}
+		if input["description"] != "Updated description" {
+			t.Errorf("Expected description to be Updated description, got %v", input["description"])
+		}
+		if input["projectId"] != "proj-123" {
+			t.Errorf("Expected projectId to be proj-123, got %v", input["projectId"])
+		}
+		if priority, ok := input["priority"].(float64); !ok || priority != 2 {
+			t.Errorf("Expected priority to be 2, got %v", input["priority"])
+		}
+
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issueUpdate": {
+					"success": true,
+					"issue": {
+						"id": "issue-123",
+						"identifier": "TEST-123",
+						"title": "Updated title",
+						"url": "https://linear.app/test/issue/TEST-123"
+					}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	title := "Updated title"
+	description := "Updated description"
+	priority := 2
+	projectID := "proj-123"
+	input := UpdateIssueInput{
+		Title:       &title,
+		Description: &description,
+		Priority:    &priority,
+		ProjectID:   &projectID,
+	}
+
+	resp, err := client.UpdateIssue(context.Background(), "TEST-123", input)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if !resp.IssueUpdate.Success {
+		t.Error("Expected success to be true")
+	}
+	if resp.IssueUpdate.Issue == nil {
+		t.Fatal("Expected issue to be non-nil")
+	}
+	if resp.IssueUpdate.Issue.Identifier != "TEST-123" {
+		t.Errorf("Expected identifier TEST-123, got %s", resp.IssueUpdate.Issue.Identifier)
+	}
+}
+
+func TestClient_UpdateIssue_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := graphQLResponse{
+			Errors: []struct {
+				Message string `json:"message"`
+				Path    []any  `json:"path,omitempty"`
+			}{
+				{Message: "Issue not found"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	title := "Updated title"
+	_, err := client.UpdateIssue(context.Background(), "NONEXISTENT", UpdateIssueInput{
+		Title: &title,
+	})
+	if err == nil {
+		t.Error("Expected an error, got nil")
+	}
+}
+
 func TestClient_ListIssues_WithCustomLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req graphQLRequest
