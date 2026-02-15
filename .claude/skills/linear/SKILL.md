@@ -17,7 +17,7 @@ Manage Linear issues, teams, and projects from the command line.
 | List issues | `linear issue list [--team KEY] [--project NAME] [--limit N] [--all] [--json]` |
 | View issue | `linear issue view ID [--json]` |
 | Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--json]` |
-| Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--json]` |
+| Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--json]` |
 | List teams | `linear team list [--json]` |
 | List projects | `linear project list [--team KEY] [--json]` |
 | Auth status | `linear auth status` |

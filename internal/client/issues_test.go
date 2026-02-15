@@ -318,6 +318,9 @@ func TestClient_UpdateIssue(t *testing.T) {
 		if priority, ok := input["priority"].(float64); !ok || priority != 2 {
 			t.Errorf("Expected priority to be 2, got %v", input["priority"])
 		}
+		if input["assigneeId"] != "user-123" {
+			t.Errorf("Expected assigneeId to be user-123, got %v", input["assigneeId"])
+		}
 
 		response := graphQLResponse{
 			Data: json.RawMessage(`{
@@ -346,11 +349,13 @@ func TestClient_UpdateIssue(t *testing.T) {
 	description := "Updated description"
 	priority := 2
 	projectID := "proj-123"
+	assigneeID := "user-123"
 	input := UpdateIssueInput{
 		Title:       &title,
 		Description: &description,
 		Priority:    &priority,
 		ProjectID:   &projectID,
+		AssigneeID:  &assigneeID,
 	}
 
 	resp, err := client.UpdateIssue(context.Background(), "TEST-123", input)

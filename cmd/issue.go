@@ -23,6 +23,7 @@ var (
 	issueUpdateDesc        string
 	issueUpdatePriority    int
 	issueUpdateProject     string
+	issueUpdateAssignee    string
 	issueLimit             int
 	fetchAll               bool
 )
@@ -354,7 +355,8 @@ Examples:
   linear issue update ENG-123 --title "Updated title"
   linear issue update ENG-123 --description "New details"
   linear issue update ENG-123 --priority 1
-  linear issue update ENG-123 --project "Mobile App"`,
+  linear issue update ENG-123 --project "Mobile App"
+  linear issue update ENG-123 --assignee "user@example.com"`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		issueID := args[0]
@@ -363,9 +365,10 @@ Examples:
 		descriptionChanged := cmd.Flags().Changed("description")
 		priorityChanged := cmd.Flags().Changed("priority")
 		projectChanged := cmd.Flags().Changed("project")
+		assigneeChanged := cmd.Flags().Changed("assignee")
 
-		if !titleChanged && !descriptionChanged && !priorityChanged && !projectChanged {
-			fmt.Fprintln(os.Stderr, "Error: specify at least one field to update (--title, --description, --priority, --project)")
+		if !titleChanged && !descriptionChanged && !priorityChanged && !projectChanged && !assigneeChanged {
+			fmt.Fprintln(os.Stderr, "Error: specify at least one field to update (--title, --description, --priority, --project, --assignee)")
 			os.Exit(1)
 		}
 
@@ -405,6 +408,20 @@ Examples:
 
 		if priorityChanged {
 			input.Priority = &issueUpdatePriority
+		}
+
+		if assigneeChanged {
+			if issueUpdateAssignee == "" {
+				fmt.Fprintf(os.Stderr, "Error: --assignee must not be empty\n")
+				os.Exit(1)
+			} else {
+				user, err := c.GetUserByEmail(ctx, issueUpdateAssignee)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error fetching user by email: %v\n", err)
+					os.Exit(1)
+				}
+				input.AssigneeID = &user.ID
+			}
 		}
 
 		if projectChanged {
@@ -482,6 +499,7 @@ func init() {
 	issueUpdateCmd.Flags().StringVar(&issueUpdateDesc, "description", "", "Updated issue description (use empty string to clear)")
 	issueUpdateCmd.Flags().IntVar(&issueUpdatePriority, "priority", 0, "Updated issue priority (0-4)")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateProject, "project", "", "Updated project name or ID")
+	issueUpdateCmd.Flags().StringVar(&issueUpdateAssignee, "assignee", "", "Updated issue assignee (email)")
 
 	issueCmd.AddCommand(issueListCmd)
 	issueCmd.AddCommand(issueViewCmd)

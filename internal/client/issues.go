@@ -341,6 +341,7 @@ type UpdateIssueInput struct {
 	Description *string `json:"description,omitempty"`
 	Priority    *int    `json:"priority,omitempty"`
 	ProjectID   *string `json:"projectId,omitempty"`
+	AssigneeID  *string `json:"assigneeId,omitempty"`
 }
 
 // UpdateIssueResponse is the response for updating an issue

@@ -189,6 +189,9 @@ linear issue update ENG-123 --priority 2
 # Move issue to another project
 linear issue update ENG-123 --project "Mobile App"
 
+# Assign user
+linear issue update ENG-123 --assignee "user@example.com"
+
 # Clear description
 linear issue update ENG-123 --description ""
 
