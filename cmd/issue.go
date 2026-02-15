@@ -18,6 +18,7 @@ var (
 	issueDesc              string
 	issueTeamID            string
 	issueProjectIdentifier string
+	issueAssignee          string
 	issueUpdateTitle       string
 	issueUpdateDesc        string
 	issueUpdatePriority    int
@@ -301,6 +302,15 @@ Examples:
 			input.ProjectID = projectID
 		}
 
+		if issueAssignee != "" {
+			user, err := c.GetUserByEmail(ctx, issueAssignee)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fetching user by email: %v\n", err)
+				os.Exit(1)
+			}
+			input.AssigneeID = user.ID
+		}
+
 		resp, err := c.CreateIssue(ctx, input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating issue: %v\n", err)
@@ -466,6 +476,7 @@ func init() {
 	issueCreateCmd.Flags().StringVar(&issueDesc, "description", "", "Issue description")
 	issueCreateCmd.Flags().StringVar(&issueTeamID, "team", "", "Team key (required)")
 	issueCreateCmd.Flags().StringVar(&issueProjectIdentifier, "project", "", "Project name or ID (optional)")
+	issueCreateCmd.Flags().StringVar(&issueAssignee, "assignee", "", "Issue Assignee (email, optional)")
 
 	issueUpdateCmd.Flags().StringVar(&issueUpdateTitle, "title", "", "Updated issue title")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateDesc, "description", "", "Updated issue description (use empty string to clear)")

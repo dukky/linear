@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestClient_ListIssues_NoFilter(t *testing.T) {
@@ -192,6 +194,17 @@ func TestClient_CreateIssue(t *testing.T) {
 			t.Error("Expected query to be non-empty")
 		}
 
+		reqInput, ok := req.Variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected input object in variables, got %T", req.Variables["input"])
+		}
+		// Assert that requried fields were sent
+		require.Equal(t, "New Test Issue", reqInput["title"])
+		require.Equal(t, "Test description", reqInput["description"])
+		require.Equal(t, "team-123", reqInput["teamId"])
+		require.Equal(t, "proj-123", reqInput["projectId"])
+		require.Equal(t, "user-123", reqInput["assigneeId"])
+
 		// Return a mock response
 		response := graphQLResponse{
 			Data: json.RawMessage(`{
@@ -220,6 +233,8 @@ func TestClient_CreateIssue(t *testing.T) {
 		Title:       "New Test Issue",
 		Description: "Test description",
 		TeamID:      "team-123",
+		ProjectID:   "proj-123",
+		AssigneeID:  "user-123",
 	}
 
 	resp, err := client.CreateIssue(context.Background(), input)

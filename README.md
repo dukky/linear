@@ -169,7 +169,8 @@ linear issue create --team ENG --title "New feature request"
 linear issue create \
   --team ENG \
   --title "Fix bug in authentication" \
-  --description "Users are experiencing login failures"
+  --description "Users are experiencing login failures" \
+  --assignee "user@example.com"
 
 # JSON output
 linear issue create --team ENG --title "Bug fix" --json
