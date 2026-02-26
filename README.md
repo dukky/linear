@@ -36,7 +36,7 @@ sudo mv linear /usr/local/bin/  # Optional: move to PATH
 
 ### 1. Authenticate
 
-Get your API key from [Linear Settings](https://linear.app/settings/api) and run:
+Get your API key from [Linear Settings](https://linear.app/monzo/settings/account/security) and run:
 
 ```bash
 linear auth login
