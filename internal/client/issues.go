@@ -445,3 +445,55 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string) (*Comment
 
 	return &resp, nil
 }
+
+// CreateCommentInput represents the input for creating a comment
+type CreateCommentInput struct {
+	Body string `json:"body"`
+}
+
+// CreateCommentResponse is the response for creating a comment
+type CreateCommentResponse struct {
+	CommentCreate struct {
+		Success bool `json:"success"`
+		Comment struct {
+			ID        string `json:"id"`
+			Body      string `json:"body"`
+			CreatedAt string `json:"createdAt"`
+			User      *User  `json:"user"`
+		} `json:"comment"`
+	} `json:"commentCreate"`
+}
+
+// CreateComment creates a comment on an issue
+func (c *Client) CreateComment(ctx context.Context, issueID, body string) (*CreateCommentResponse, error) {
+	query := `
+		mutation($input: CommentCreateInput!) {
+			commentCreate(input: $input) {
+				success
+				comment {
+					id
+					body
+					createdAt
+					user {
+						id
+						name
+					}
+				}
+			}
+		}
+	`
+
+	vars := map[string]interface{}{
+		"input": map[string]interface{}{
+			"issueId": issueID,
+			"body":    body,
+		},
+	}
+
+	var resp CreateCommentResponse
+	if err := c.Do(ctx, query, vars, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}

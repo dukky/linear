@@ -483,6 +483,51 @@ Examples:
 	},
 }
 
+var issueCommentCmd = &cobra.Command{
+	Use:   "comment <issue-id> <message>",
+	Short: "Add a comment to an issue",
+	Long: `Add a comment to a specific issue.
+
+Examples:
+  linear issue comment ENG-123 "Looks good to me"
+  linear issue comment <uuid> "Deploying now"`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		issueID := args[0]
+		body := args[1]
+
+		c, err := client.NewClient()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		resp, err := c.CreateComment(ctx, issueID, body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating comment: %v\n", err)
+			os.Exit(1)
+		}
+
+		if !resp.CommentCreate.Success {
+			fmt.Fprintln(os.Stderr, "Error: Failed to create comment")
+			os.Exit(1)
+		}
+
+		if jsonOutput {
+			if err := output.PrintJSON(resp.CommentCreate.Comment); err != nil {
+				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		fmt.Printf("Comment added to %s\n", issueID)
+	},
+}
+
 var commentsCmd = &cobra.Command{
 	Use:   "comments <issue-id>",
 	Short: "List comments on an issue",
@@ -563,5 +608,6 @@ func init() {
 	issueCmd.AddCommand(issueCreateCmd)
 	issueCmd.AddCommand(issueUpdateCmd)
 	issueCmd.AddCommand(commentsCmd)
+	issueCmd.AddCommand(issueCommentCmd)
 	rootCmd.AddCommand(issueCmd)
 }
