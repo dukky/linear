@@ -512,6 +512,10 @@ Examples:
 
 		comments := resp.Issue.Comments.Nodes
 
+		if resp.Issue.Comments.PageInfo.HasNextPage {
+			fmt.Fprintf(os.Stderr, "Warning: more than %d comments exist (pagination not yet supported).\n", len(comments))
+		}
+
 		if jsonOutput {
 			if err := output.PrintJSON(comments); err != nil {
 				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
