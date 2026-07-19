@@ -464,8 +464,20 @@ type CreateCommentResponse struct {
 	} `json:"commentCreate"`
 }
 
-// CreateComment creates a comment on an issue
+// CreateComment creates a comment on an issue. issueID can be either
+// a human identifier (e.g., ENG-123) or a UUID.
 func (c *Client) CreateComment(ctx context.Context, issueID, body string) (*CreateCommentResponse, error) {
+	// Resolve to UUID in case the caller passes a human identifier —
+	// CommentCreateInput.issueId expects a UUID, unlike the top-level
+	// issue(id:) argument which accepts both.
+	issueResp, err := c.GetIssue(ctx, issueID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving issue %s: %w", issueID, err)
+	}
+	if issueResp.Issue == nil {
+		return nil, fmt.Errorf("issue not found: %s", issueID)
+	}
+
 	query := `
 		mutation($input: CommentCreateInput!) {
 			commentCreate(input: $input) {
@@ -485,7 +497,7 @@ func (c *Client) CreateComment(ctx context.Context, issueID, body string) (*Crea
 
 	vars := map[string]interface{}{
 		"input": map[string]interface{}{
-			"issueId": issueID,
+			"issueId": issueResp.Issue.ID,
 			"body":    body,
 		},
 	}
