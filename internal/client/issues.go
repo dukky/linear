@@ -54,6 +54,21 @@ type Label struct {
 	Color string `json:"color"`
 }
 
+// Comment represents a comment on a Linear issue
+type Comment struct {
+	ID        string `json:"id"`
+	Body      string `json:"body"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	User      *User  `json:"user"`
+}
+
+// CommentConnection is the paginated comments wrapper
+type CommentConnection struct {
+	Nodes    []Comment `json:"nodes"`
+	PageInfo PageInfo  `json:"pageInfo"`
+}
+
 // IssuesResponse is the response for listing issues
 type IssuesResponse struct {
 	Issues struct {
@@ -71,6 +86,13 @@ type PageInfo struct {
 // IssueResponse is the response for getting a single issue
 type IssueResponse struct {
 	Issue *Issue `json:"issue"`
+}
+
+// CommentsResponse is the response for listing comments
+type CommentsResponse struct {
+	Issue struct {
+		Comments CommentConnection `json:"comments"`
+	} `json:"issue"`
 }
 
 // ListIssuesOptions contains options for listing issues
@@ -379,6 +401,44 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input UpdateIssueIn
 	}
 
 	var resp UpdateIssueResponse
+	if err := c.Do(ctx, query, vars, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// GetIssueComments retrieves comments for an issue
+func (c *Client) GetIssueComments(ctx context.Context, issueID string) (*CommentsResponse, error) {
+	query := `
+		query($id: String!) {
+			issue(id: $id) {
+				comments {
+					nodes {
+						id
+						body
+						createdAt
+						updatedAt
+						user {
+							id
+							name
+							email
+						}
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`
+
+	vars := map[string]interface{}{
+		"id": issueID,
+	}
+
+	var resp CommentsResponse
 	if err := c.Do(ctx, query, vars, &resp); err != nil {
 		return nil, err
 	}

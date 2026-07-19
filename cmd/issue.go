@@ -483,6 +483,59 @@ Examples:
 	},
 }
 
+var commentsCmd = &cobra.Command{
+	Use:   "comments <issue-id>",
+	Short: "List comments on an issue",
+	Long: `List comments on a specific issue.
+
+Examples:
+  linear issue comments ENG-123
+  linear issue comments <issue-uuid>`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		issueID := args[0]
+
+		c, err := client.NewClient()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		resp, err := c.GetIssueComments(ctx, issueID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error fetching comments: %v\n", err)
+			os.Exit(1)
+		}
+
+		comments := resp.Issue.Comments.Nodes
+
+		if jsonOutput {
+			if err := output.PrintJSON(comments); err != nil {
+				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		if len(comments) == 0 {
+			fmt.Println("No comments found.")
+			return
+		}
+
+		for i, comment := range comments {
+			user := "Unknown"
+			if comment.User != nil {
+				user = comment.User.Name
+			}
+			fmt.Printf("[%d] %s — %s\n", i+1, user, comment.CreatedAt)
+			fmt.Printf("    %s\n\n", comment.Body)
+		}
+	},
+}
+
 func init() {
 	issueListCmd.Flags().StringVar(&teamFilter, "team", "", "Filter by team key (e.g., ENG)")
 	issueListCmd.Flags().StringVar(&projectFilter, "project", "", "Filter by project name or ID")
@@ -505,5 +558,6 @@ func init() {
 	issueCmd.AddCommand(issueViewCmd)
 	issueCmd.AddCommand(issueCreateCmd)
 	issueCmd.AddCommand(issueUpdateCmd)
+	issueCmd.AddCommand(commentsCmd)
 	rootCmd.AddCommand(issueCmd)
 }
