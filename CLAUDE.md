@@ -53,7 +53,7 @@ sudo mv linear /usr/local/bin/
 **`cmd/`** - Cobra CLI commands
 - `root.go` - Root command and global `--json` flag
 - `auth.go` - Authentication commands (login, status)
-- `issue.go` - Issue commands (list, view, create, update)
+- `issue.go` - Issue commands (list, view, create, update, comments, comment)
 - `team.go` - Team commands (list)
 
 **`internal/auth/`** - Authentication and credential management
@@ -129,6 +129,8 @@ Response wrappers:
 - `IssueResponse` - for single issue
 - `TeamsResponse` - for teams
 - `CreateIssueResponse` - for issue creation
+- `CommentsResponse` - for listing comments (Issue is a pointer — nil means issue not found)
+- `CreateCommentResponse` - for creating comments (commentCreate mutation)
 
 ## Claude Code Integration
 
@@ -141,6 +143,8 @@ Always use `--json` flag when programmatically parsing output:
 - `linear issue view ENG-123 --json`
 - `linear issue create --team ENG --title "..." --description "..." --json`
 - `linear issue update ENG-123 --title "..." --priority 2 --json`
+- `linear issue comments ENG-123 --json`
+- `linear issue comment ENG-123 "message" --json`
 
 ### Team Keys vs Names
 - Commands use **team keys** (short codes like "ENG", "PROD"), not full names
@@ -178,6 +182,13 @@ Updating issues may involve project resolution:
 2. If `project` is set, fetch issue via `GetIssue()` to scope project lookup by team
 3. Resolve project using `GetProjectByIdentifier()`
 4. Update issue via `UpdateIssue()`
+
+### Comment Resolution Flow
+Creating a comment on an issue requires resolving the human-readable identifier to a UUID:
+1. `GetIssue()` resolves the identifier (e.g., "ENG-123") to a UUID
+2. `CreateComment()` passes the UUID in `CommentCreateInput.IssueId`
+
+This is necessary because `issueId` in the mutation input does not accept human identifiers — only UUIDs.
 
 ### Output Formatting
 - **Table format**: Uses `text/tabwriter` for aligned columns
