@@ -16,6 +16,8 @@ Manage Linear issues, teams, and projects from the command line.
 |--------|---------|
 | List issues | `linear issue list [--team KEY] [--project NAME] [--limit N] [--all] [--json]` |
 | View issue | `linear issue view ID [--json]` |
+| List comments | `linear issue comments ID [--json]` |
+| Add comment | `linear issue comment ID "message" [--json]` |
 | Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--json]` |
 | Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--json]` |
 | List teams | `linear team list [--json]` |
@@ -56,6 +58,12 @@ Manage Linear issues, teams, and projects from the command line.
 {"id": "uuid", "name": "Mobile App"}
 ```
 
+### Comment
+```json
+{"id": "uuid", "body": "Looks good!", "createdAt": "2026-07-19T...",
+ "user": {"id": "uuid", "name": "Andy", "email": "..."}}
+```
+
 ## Common Patterns
 
 **List issues by team:**
@@ -91,6 +99,16 @@ linear issue view ENG-123 --json
 **Count issues (fetch all, count array):**
 ```bash
 linear issue list --team ENG --all --json | jq length
+```
+
+**List comments on an issue:**
+```bash
+linear issue comments ENG-123 --json
+```
+
+**Add a comment to an issue:**
+```bash
+linear issue comment ENG-123 "Fixed in PR #42" --json
 ```
 
 ## Reference Values
