@@ -555,6 +555,11 @@ Examples:
 			os.Exit(1)
 		}
 
+		if resp.Issue == nil {
+			fmt.Fprintf(os.Stderr, "Error: issue %s not found\n", issueID)
+			os.Exit(1)
+		}
+
 		comments := resp.Issue.Comments.Nodes
 
 		if resp.Issue.Comments.PageInfo.HasNextPage {

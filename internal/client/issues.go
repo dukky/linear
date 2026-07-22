@@ -90,7 +90,7 @@ type IssueResponse struct {
 
 // CommentsResponse is the response for listing comments
 type CommentsResponse struct {
-	Issue struct {
+	Issue *struct {
 		Comments CommentConnection `json:"comments"`
 	} `json:"issue"`
 }
