@@ -483,6 +483,113 @@ Examples:
 	},
 }
 
+var issueCommentCmd = &cobra.Command{
+	Use:   "comment <issue-id> <message>",
+	Short: "Add a comment to an issue",
+	Long: `Add a comment to a specific issue.
+
+Examples:
+  linear issue comment ENG-123 "Looks good to me"
+  linear issue comment <uuid> "Deploying now"`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		issueID := args[0]
+		body := args[1]
+
+		c, err := client.NewClient()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		resp, err := c.CreateComment(ctx, issueID, body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating comment: %v\n", err)
+			os.Exit(1)
+		}
+
+		if !resp.CommentCreate.Success {
+			fmt.Fprintln(os.Stderr, "Error: Failed to create comment")
+			os.Exit(1)
+		}
+
+		if jsonOutput {
+			if err := output.PrintJSON(resp.CommentCreate.Comment); err != nil {
+				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		fmt.Printf("Comment added to %s\n", issueID)
+	},
+}
+
+var commentsCmd = &cobra.Command{
+	Use:   "comments <issue-id>",
+	Short: "List comments on an issue",
+	Long: `List comments on a specific issue.
+
+Examples:
+  linear issue comments ENG-123
+  linear issue comments <issue-uuid>`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		issueID := args[0]
+
+		c, err := client.NewClient()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		resp, err := c.GetIssueComments(ctx, issueID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error fetching comments: %v\n", err)
+			os.Exit(1)
+		}
+
+		if resp.Issue == nil {
+			fmt.Fprintf(os.Stderr, "Error: issue %s not found\n", issueID)
+			os.Exit(1)
+		}
+
+		comments := resp.Issue.Comments.Nodes
+
+		if resp.Issue.Comments.PageInfo.HasNextPage {
+			fmt.Fprintf(os.Stderr, "Warning: more than %d comments exist (pagination not yet supported).\n", len(comments))
+		}
+
+		if jsonOutput {
+			if err := output.PrintJSON(comments); err != nil {
+				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		if len(comments) == 0 {
+			fmt.Println("No comments found.")
+			return
+		}
+
+		for i, comment := range comments {
+			user := "Unknown"
+			if comment.User != nil {
+				user = comment.User.Name
+			}
+			fmt.Printf("[%d] %s — %s\n", i+1, user, comment.CreatedAt)
+			fmt.Printf("    %s\n\n", comment.Body)
+		}
+	},
+}
+
 func init() {
 	issueListCmd.Flags().StringVar(&teamFilter, "team", "", "Filter by team key (e.g., ENG)")
 	issueListCmd.Flags().StringVar(&projectFilter, "project", "", "Filter by project name or ID")
@@ -505,5 +612,7 @@ func init() {
 	issueCmd.AddCommand(issueViewCmd)
 	issueCmd.AddCommand(issueCreateCmd)
 	issueCmd.AddCommand(issueUpdateCmd)
+	issueCmd.AddCommand(commentsCmd)
+	issueCmd.AddCommand(issueCommentCmd)
 	rootCmd.AddCommand(issueCmd)
 }

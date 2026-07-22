@@ -54,6 +54,21 @@ type Label struct {
 	Color string `json:"color"`
 }
 
+// Comment represents a comment on a Linear issue
+type Comment struct {
+	ID        string `json:"id"`
+	Body      string `json:"body"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	User      *User  `json:"user"`
+}
+
+// CommentConnection is the paginated comments wrapper
+type CommentConnection struct {
+	Nodes    []Comment `json:"nodes"`
+	PageInfo PageInfo  `json:"pageInfo"`
+}
+
 // IssuesResponse is the response for listing issues
 type IssuesResponse struct {
 	Issues struct {
@@ -71,6 +86,13 @@ type PageInfo struct {
 // IssueResponse is the response for getting a single issue
 type IssueResponse struct {
 	Issue *Issue `json:"issue"`
+}
+
+// CommentsResponse is the response for listing comments
+type CommentsResponse struct {
+	Issue *struct {
+		Comments CommentConnection `json:"comments"`
+	} `json:"issue"`
 }
 
 // ListIssuesOptions contains options for listing issues
@@ -379,6 +401,108 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input UpdateIssueIn
 	}
 
 	var resp UpdateIssueResponse
+	if err := c.Do(ctx, query, vars, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// GetIssueComments retrieves comments for an issue
+func (c *Client) GetIssueComments(ctx context.Context, issueID string) (*CommentsResponse, error) {
+	query := `
+		query($id: String!) {
+			issue(id: $id) {
+				comments {
+					nodes {
+						id
+						body
+						createdAt
+						updatedAt
+						user {
+							id
+							name
+							email
+						}
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`
+
+	vars := map[string]interface{}{
+		"id": issueID,
+	}
+
+	var resp CommentsResponse
+	if err := c.Do(ctx, query, vars, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// CreateCommentInput represents the input for creating a comment
+type CreateCommentInput struct {
+	Body string `json:"body"`
+}
+
+// CreateCommentResponse is the response for creating a comment
+type CreateCommentResponse struct {
+	CommentCreate struct {
+		Success bool `json:"success"`
+		Comment struct {
+			ID        string `json:"id"`
+			Body      string `json:"body"`
+			CreatedAt string `json:"createdAt"`
+			User      *User  `json:"user"`
+		} `json:"comment"`
+	} `json:"commentCreate"`
+}
+
+// CreateComment creates a comment on an issue. issueID can be either
+// a human identifier (e.g., ENG-123) or a UUID.
+func (c *Client) CreateComment(ctx context.Context, issueID, body string) (*CreateCommentResponse, error) {
+	// Resolve to UUID in case the caller passes a human identifier —
+	// CommentCreateInput.issueId expects a UUID, unlike the top-level
+	// issue(id:) argument which accepts both.
+	issueResp, err := c.GetIssue(ctx, issueID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving issue %s: %w", issueID, err)
+	}
+	if issueResp.Issue == nil {
+		return nil, fmt.Errorf("issue not found: %s", issueID)
+	}
+
+	query := `
+		mutation($input: CommentCreateInput!) {
+			commentCreate(input: $input) {
+				success
+				comment {
+					id
+					body
+					createdAt
+					user {
+						id
+						name
+					}
+				}
+			}
+		}
+	`
+
+	vars := map[string]interface{}{
+		"input": map[string]interface{}{
+			"issueId": issueResp.Issue.ID,
+			"body":    body,
+		},
+	}
+
+	var resp CreateCommentResponse
 	if err := c.Do(ctx, query, vars, &resp); err != nil {
 		return nil, err
 	}
