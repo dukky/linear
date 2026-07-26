@@ -413,7 +413,7 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string) (*Comment
 	query := `
 		query($id: String!) {
 			issue(id: $id) {
-				comments {
+				comments(orderBy: createdAt) {
 					nodes {
 						id
 						body
