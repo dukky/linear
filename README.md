@@ -23,6 +23,14 @@ go install github.com/dukky/linear@latest
 
 This will install the `linear` binary to your `$GOBIN` directory (typically `~/go/bin`). Make sure this directory is in your `PATH`.
 
+After installing, run the one-time setup to install the Claude Code skill:
+
+```bash
+linear setup
+```
+
+Run `linear setup` again after updating the binary to pick up any skill improvements.
+
 ### From Source
 
 ```bash
@@ -203,17 +211,6 @@ linear issue update ENG-123 --title "Updated issue title" --json
 
 This CLI is designed to work seamlessly with Claude Code through a skill that enables automatic tool calling.
 
-### Install the Claude Code Skill
-
-From the repo, copy the skill to your global Claude skills directory:
-
-```bash
-mkdir -p ~/.claude/skills/linear
-cp .claude/skills/linear/SKILL.md ~/.claude/skills/linear/
-```
-
-Run the same commands to update after pulling new changes.
-
 ### Setup
 
 1. **Install the Linear CLI**:
@@ -226,9 +223,14 @@ Run the same commands to update after pulling new changes.
    linear auth login
    ```
 
-3. **Install the skill** (see above)
+3. **Install the Claude Code skill** (embeds the latest skill from the binary):
+   ```bash
+   linear setup
+   ```
 
 That's it! Claude will now be able to interact with Linear on your behalf.
+
+Run `linear setup` again after updating the binary to pick up any skill improvements.
 
 ### What this enables
 
