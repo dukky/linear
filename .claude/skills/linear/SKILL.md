@@ -18,8 +18,8 @@ Manage Linear issues, teams, and projects from the command line.
 | View issue | `linear issue view ID [--json]` |
 | List comments | `linear issue comments ID [--json]` |
 | Add comment | `linear issue comment ID "message" [--json]` |
-| Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--json]` |
-| Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--json]` |
+| Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--json]` |
+| Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--json]` |
 | List teams | `linear team list [--json]` |
 | List projects | `linear project list [--team KEY] [--json]` |
 | Auth status | `linear auth status` |
@@ -31,6 +31,8 @@ Manage Linear issues, teams, and projects from the command line.
 **Issue IDs**: Use human-readable IDs (`ENG-123`) or UUIDs.
 
 **Project IDs**: Use project name (`"Mobile App"`) or UUID. Names are matched case-insensitively.
+
+**State names**: Workflow state names (e.g., `"In Progress"`, `"Done"`) are team-scoped and matched case-insensitively against the issue's (or `--team`'s) states.
 
 **JSON output**: Add `--json` to any command for structured output. Use for parsing/analysis.
 
@@ -91,6 +93,16 @@ linear issue update ENG-123 --title "Refine onboarding copy" --priority 2 --json
 linear issue update ENG-123 --project "Q2 Goals" --json
 ```
 
+**Set an issue's workflow state:**
+```bash
+linear issue update ENG-123 --state "In Progress" --json
+```
+
+**Create an issue directly in a given state:**
+```bash
+linear issue create --team ENG --title "Add feature" --state "In Progress" --json
+```
+
 **View issue details:**
 ```bash
 linear issue view ENG-123 --json
@@ -135,3 +147,6 @@ linear issue comment ENG-123 "Fixed in PR #42" --json
 - Check available projects: `linear project list --team KEY`
 - Project names are matched case-insensitively
 - If multiple projects match, use exact name or UUID to disambiguate
+
+**"state not found"**
+- The error lists the valid state names for the issue's team — pick one of those (case-insensitive)

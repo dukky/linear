@@ -143,6 +143,7 @@ Always use `--json` flag when programmatically parsing output:
 - `linear issue view ENG-123 --json`
 - `linear issue create --team ENG --title "..." --description "..." --json`
 - `linear issue update ENG-123 --title "..." --priority 2 --json`
+- `linear issue update ENG-123 --state "In Progress" --json`
 - `linear issue comments ENG-123 --json`
 - `linear issue comment ENG-123 "message" --json`
 
@@ -177,11 +178,16 @@ Creating issues requires two steps:
 Team keys (e.g., "ENG") must be resolved to UUIDs before creating issues.
 
 ### Issue Update Flow
-Updating issues may involve project resolution:
-1. Build update input from changed flags (`title`, `description`, `priority`, `project`)
-2. If `project` is set, fetch issue via `GetIssue()` to scope project lookup by team
-3. Resolve project using `GetProjectByIdentifier()`
+Updating issues may involve project and/or state resolution:
+1. Build update input from changed flags (`title`, `description`, `priority`, `project`, `assignee`, `state`)
+2. If `project` or `state` is set, fetch issue via `GetIssue()` once to scope both lookups by the issue's own team (which may differ from any `--team` used elsewhere)
+3. Resolve project using `GetProjectByIdentifier()`; resolve state using `GetStateByName()` (case-insensitive match against `team.states`)
 4. Update issue via `UpdateIssue()`
+
+### State Resolution
+Workflow state names are team-scoped, so resolving a `--state` flag to a `stateId` requires the team the issue belongs to (for `create`, the `--team` being created into; for `update`, the issue's own team):
+1. `GetTeamStates()` queries `team(id: ...).states.nodes` for `{id, name, type}`
+2. `GetStateByName()` matches the provided name case-insensitively; if no match, the error lists the team's valid state names
 
 ### Comment Resolution Flow
 Creating a comment on an issue requires resolving the human-readable identifier to a UUID:

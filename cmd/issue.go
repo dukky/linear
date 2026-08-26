@@ -19,11 +19,13 @@ var (
 	issueTeamID            string
 	issueProjectIdentifier string
 	issueAssignee          string
+	issueState             string
 	issueUpdateTitle       string
 	issueUpdateDesc        string
 	issueUpdatePriority    int
 	issueUpdateProject     string
 	issueUpdateAssignee    string
+	issueUpdateState       string
 	issueLimit             int
 	fetchAll               bool
 )
@@ -243,7 +245,8 @@ var issueCreateCmd = &cobra.Command{
 Examples:
   linear issue create --team ENG --title "Fix bug" --description "Bug details"
   linear issue create --team ENG --title "New feature" --project "Mobile App"
-  linear issue create --team ENG --title "Task" --project "4e26961e-967f-458f-8fa2-4240035aa178"`,
+  linear issue create --team ENG --title "Task" --project "4e26961e-967f-458f-8fa2-4240035aa178"
+  linear issue create --team ENG --title "New task" --state "In Progress"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if issueTitle == "" {
 			fmt.Fprintln(os.Stderr, "Error: --title is required")
@@ -289,6 +292,17 @@ Examples:
 			projectID = project.ID
 		}
 
+		// Resolve state if specified (state names are team-scoped)
+		var stateID string
+		if issueState != "" {
+			state, err := c.GetStateByName(ctx, teamID, issueState)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fetching state: %v\n", err)
+				os.Exit(1)
+			}
+			stateID = state.ID
+		}
+
 		// Create the issue
 		input := client.CreateIssueInput{
 			Title:  issueTitle,
@@ -301,6 +315,10 @@ Examples:
 
 		if projectID != "" {
 			input.ProjectID = projectID
+		}
+
+		if stateID != "" {
+			input.StateID = stateID
 		}
 
 		if issueAssignee != "" {
@@ -356,7 +374,8 @@ Examples:
   linear issue update ENG-123 --description "New details"
   linear issue update ENG-123 --priority 1
   linear issue update ENG-123 --project "Mobile App"
-  linear issue update ENG-123 --assignee "user@example.com"`,
+  linear issue update ENG-123 --assignee "user@example.com"
+  linear issue update ENG-123 --state "Done"`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		issueID := args[0]
@@ -366,9 +385,10 @@ Examples:
 		priorityChanged := cmd.Flags().Changed("priority")
 		projectChanged := cmd.Flags().Changed("project")
 		assigneeChanged := cmd.Flags().Changed("assignee")
+		stateChanged := cmd.Flags().Changed("state")
 
-		if !titleChanged && !descriptionChanged && !priorityChanged && !projectChanged && !assigneeChanged {
-			fmt.Fprintln(os.Stderr, "Error: specify at least one field to update (--title, --description, --priority, --project, --assignee)")
+		if !titleChanged && !descriptionChanged && !priorityChanged && !projectChanged && !assigneeChanged && !stateChanged {
+			fmt.Fprintln(os.Stderr, "Error: specify at least one field to update (--title, --description, --priority, --project, --assignee, --state)")
 			os.Exit(1)
 		}
 
@@ -379,6 +399,11 @@ Examples:
 
 		if projectChanged && issueUpdateProject == "" {
 			fmt.Fprintln(os.Stderr, "Error: --project cannot be empty")
+			os.Exit(1)
+		}
+
+		if stateChanged && issueUpdateState == "" {
+			fmt.Fprintln(os.Stderr, "Error: --state cannot be empty")
 			os.Exit(1)
 		}
 
@@ -424,7 +449,10 @@ Examples:
 			}
 		}
 
-		if projectChanged {
+		// Project and state resolution are both scoped to the issue's own team
+		// (which may differ from any --team used elsewhere), so fetch the issue
+		// once up front and reuse it for both.
+		if projectChanged || stateChanged {
 			issueResp, err := c.GetIssue(ctx, issueID)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error fetching issue: %v\n", err)
@@ -440,14 +468,31 @@ Examples:
 				teamID = issueResp.Issue.Team.ID
 			}
 
-			project, err := c.GetProjectByIdentifier(ctx, issueUpdateProject, teamID)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error fetching project: %v\n", err)
-				fmt.Fprintln(os.Stderr, "Tip: Run 'linear project list' to see available projects")
-				os.Exit(1)
+			if projectChanged {
+				project, err := c.GetProjectByIdentifier(ctx, issueUpdateProject, teamID)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error fetching project: %v\n", err)
+					fmt.Fprintln(os.Stderr, "Tip: Run 'linear project list' to see available projects")
+					os.Exit(1)
+				}
+
+				input.ProjectID = &project.ID
 			}
 
-			input.ProjectID = &project.ID
+			if stateChanged {
+				if teamID == "" {
+					fmt.Fprintln(os.Stderr, "Error: could not determine issue's team to resolve state")
+					os.Exit(1)
+				}
+
+				state, err := c.GetStateByName(ctx, teamID, issueUpdateState)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error fetching state: %v\n", err)
+					os.Exit(1)
+				}
+
+				input.StateID = &state.ID
+			}
 		}
 
 		resp, err := c.UpdateIssue(ctx, issueID, input)
@@ -601,12 +646,14 @@ func init() {
 	issueCreateCmd.Flags().StringVar(&issueTeamID, "team", "", "Team key (required)")
 	issueCreateCmd.Flags().StringVar(&issueProjectIdentifier, "project", "", "Project name or ID (optional)")
 	issueCreateCmd.Flags().StringVar(&issueAssignee, "assignee", "", "Issue Assignee (email, optional)")
+	issueCreateCmd.Flags().StringVar(&issueState, "state", "", "Issue state/workflow status name, matched case-insensitively within the team (optional, e.g., \"In Progress\")")
 
 	issueUpdateCmd.Flags().StringVar(&issueUpdateTitle, "title", "", "Updated issue title")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateDesc, "description", "", "Updated issue description (use empty string to clear)")
 	issueUpdateCmd.Flags().IntVar(&issueUpdatePriority, "priority", 0, "Updated issue priority (0-4)")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateProject, "project", "", "Updated project name or ID")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateAssignee, "assignee", "", "Updated issue assignee (email)")
+	issueUpdateCmd.Flags().StringVar(&issueUpdateState, "state", "", "Updated issue state/workflow status name, matched case-insensitively within the issue's team")
 
 	issueCmd.AddCommand(issueListCmd)
 	issueCmd.AddCommand(issueViewCmd)
