@@ -311,6 +311,7 @@ type CreateIssueInput struct {
 	TeamID        string   `json:"teamId"`
 	ProjectID     string   `json:"projectId,omitempty"`
 	AssigneeID    string   `json:"assigneeId,omitempty"`
+	StateID       string   `json:"stateId,omitempty"`
 	LabelIds      []string `json:"labelIds,omitempty"`
 	SubscriberIds []string `json:"subscriberIds,omitempty"`
 }
@@ -364,6 +365,7 @@ type UpdateIssueInput struct {
 	Priority    *int    `json:"priority,omitempty"`
 	ProjectID   *string `json:"projectId,omitempty"`
 	AssigneeID  *string `json:"assigneeId,omitempty"`
+	StateID     *string `json:"stateId,omitempty"`
 }
 
 // UpdateIssueResponse is the response for updating an issue
