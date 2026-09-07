@@ -142,6 +142,7 @@ Always use `--json` flag when programmatically parsing output:
 - `linear issue list --team ENG --json`
 - `linear issue view ENG-123 --json`
 - `linear issue create --team ENG --title "..." --description "..." --json`
+- `linear issue create --team ENG --title "..." --priority 2 --json`
 - `linear issue update ENG-123 --title "..." --priority 2 --json`
 - `linear issue update ENG-123 --state "In Progress" --json`
 - `linear issue comments ENG-123 --json`
@@ -176,6 +177,8 @@ Creating issues requires two steps:
 2. Create issue with team ID via `CreateIssue()`
 
 Team keys (e.g., "ENG") must be resolved to UUIDs before creating issues.
+
+`create` accepts `--priority` (0-4) alongside `--title`, `--description`, `--project`, `--assignee`, and `--state`. Like `update`, priority uses `cmd.Flags().Changed("priority")` to distinguish "unset" from an explicit `0` ("No priority"): `CreateIssueInput.Priority` is `*int` (`json:"priority,omitempty"`) and is only populated when the flag was passed.
 
 ### Issue Update Flow
 Updating issues may involve project and/or state resolution:
