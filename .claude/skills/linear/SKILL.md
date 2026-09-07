@@ -103,6 +103,8 @@ linear issue update ENG-123 --state "In Progress" --json
 linear issue create --team ENG --title "Add feature" --state "In Progress" --json
 ```
 
+New issues default to the **Triage** state. Set a resting state on creation (`--state "Backlog"` / `"Todo"`), or update it straight after with `linear issue update`, so created issues aren't left in triage. Note: `create` does not accept `--priority`; set priority afterwards with `linear issue update ID --priority N`.
+
 **View issue details:**
 ```bash
 linear issue view ENG-123 --json
