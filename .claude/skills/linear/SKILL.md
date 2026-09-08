@@ -18,7 +18,7 @@ Manage Linear issues, teams, and projects from the command line.
 | View issue | `linear issue view ID [--json]` |
 | List comments | `linear issue comments ID [--json]` |
 | Add comment | `linear issue comment ID "message" [--json]` |
-| Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--json]` |
+| Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--priority 0-4] [--json]` |
 | Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--json]` |
 | List teams | `linear team list [--json]` |
 | List projects | `linear project list [--team KEY] [--json]` |
@@ -103,7 +103,12 @@ linear issue update ENG-123 --state "In Progress" --json
 linear issue create --team ENG --title "Add feature" --state "In Progress" --json
 ```
 
-New issues default to the **Triage** state. Set a resting state on creation (`--state "Backlog"` / `"Todo"`), or update it straight after with `linear issue update`, so created issues aren't left in triage. Note: `create` does not accept `--priority`; set priority afterwards with `linear issue update ID --priority N`.
+**Create an issue with a priority:**
+```bash
+linear issue create --team ENG --title "Add feature" --priority 2 --json
+```
+
+New issues default to the **Triage** state. Set a resting state on creation (`--state "Backlog"` / `"Todo"`), or update it straight after with `linear issue update`, so created issues aren't left in triage.
 
 **View issue details:**
 ```bash

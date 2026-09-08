@@ -304,7 +304,10 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*IssueResponse, error
 	return &resp, nil
 }
 
-// CreateIssueInput represents the input for creating an issue
+// CreateIssueInput represents the input for creating an issue.
+// Priority is a pointer so that priority 0 ("No priority") can be sent
+// explicitly, distinguishing it from "not set" (nil), mirroring
+// UpdateIssueInput.
 type CreateIssueInput struct {
 	Title         string   `json:"title"`
 	Description   string   `json:"description,omitempty"`
@@ -312,6 +315,7 @@ type CreateIssueInput struct {
 	ProjectID     string   `json:"projectId,omitempty"`
 	AssigneeID    string   `json:"assigneeId,omitempty"`
 	StateID       string   `json:"stateId,omitempty"`
+	Priority      *int     `json:"priority,omitempty"`
 	LabelIds      []string `json:"labelIds,omitempty"`
 	SubscriberIds []string `json:"subscriberIds,omitempty"`
 }

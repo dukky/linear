@@ -20,6 +20,7 @@ var (
 	issueProjectIdentifier string
 	issueAssignee          string
 	issueState             string
+	issuePriority          int
 	issueUpdateTitle       string
 	issueUpdateDesc        string
 	issueUpdatePriority    int
@@ -246,7 +247,8 @@ Examples:
   linear issue create --team ENG --title "Fix bug" --description "Bug details"
   linear issue create --team ENG --title "New feature" --project "Mobile App"
   linear issue create --team ENG --title "Task" --project "4e26961e-967f-458f-8fa2-4240035aa178"
-  linear issue create --team ENG --title "New task" --state "In Progress"`,
+  linear issue create --team ENG --title "New task" --state "In Progress"
+  linear issue create --team ENG --title "New task" --priority 2`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if issueTitle == "" {
 			fmt.Fprintln(os.Stderr, "Error: --title is required")
@@ -255,6 +257,13 @@ Examples:
 
 		if issueTeamID == "" {
 			fmt.Fprintln(os.Stderr, "Error: --team is required")
+			os.Exit(1)
+		}
+
+		priorityChanged := cmd.Flags().Changed("priority")
+
+		if priorityChanged && (issuePriority < 0 || issuePriority > 4) {
+			fmt.Fprintln(os.Stderr, "Error: --priority must be between 0 and 4")
 			os.Exit(1)
 		}
 
@@ -319,6 +328,10 @@ Examples:
 
 		if stateID != "" {
 			input.StateID = stateID
+		}
+
+		if priorityChanged {
+			input.Priority = &issuePriority
 		}
 
 		if issueAssignee != "" {
@@ -647,6 +660,7 @@ func init() {
 	issueCreateCmd.Flags().StringVar(&issueProjectIdentifier, "project", "", "Project name or ID (optional)")
 	issueCreateCmd.Flags().StringVar(&issueAssignee, "assignee", "", "Issue Assignee (email, optional)")
 	issueCreateCmd.Flags().StringVar(&issueState, "state", "", "Issue state/workflow status name, matched case-insensitively within the team (optional, e.g., \"In Progress\")")
+	issueCreateCmd.Flags().IntVar(&issuePriority, "priority", 0, "Issue priority (0-4, optional)")
 
 	issueUpdateCmd.Flags().StringVar(&issueUpdateTitle, "title", "", "Updated issue title")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateDesc, "description", "", "Updated issue description (use empty string to clear)")
