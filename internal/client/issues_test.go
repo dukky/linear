@@ -194,6 +194,12 @@ func TestClient_CreateIssue(t *testing.T) {
 			t.Error("Expected query to be non-empty")
 		}
 
+		// The mutation must request the full issue payload (state, priority, ...)
+		// so that --json output is hydrated (regression for GitHub issue #12).
+		if !strings.Contains(req.Query, "state {") || !strings.Contains(req.Query, "priorityLabel") {
+			t.Errorf("Expected issueCreate to select the full issue payload (state, priorityLabel), got query: %s", req.Query)
+		}
+
 		reqInput, ok := req.Variables["input"].(map[string]interface{})
 		if !ok {
 			t.Fatalf("Expected input object in variables, got %T", req.Variables["input"])
@@ -214,7 +220,14 @@ func TestClient_CreateIssue(t *testing.T) {
 						"id": "new-issue-id",
 						"identifier": "TEST-124",
 						"title": "New Test Issue",
-						"url": "https://linear.app/test/issue/TEST-124"
+						"priority": 2,
+						"priorityLabel": "High",
+						"url": "https://linear.app/test/issue/TEST-124",
+						"state": {
+							"name": "In Progress",
+							"color": "#f2c94c",
+							"type": "started"
+						}
 					}
 				}
 			}`),
@@ -252,6 +265,17 @@ func TestClient_CreateIssue(t *testing.T) {
 
 	if resp.IssueCreate.Issue.Identifier != "TEST-124" {
 		t.Errorf("Expected identifier 'TEST-124', got '%s'", resp.IssueCreate.Issue.Identifier)
+	}
+
+	// The created issue's relations/enums must be hydrated (issue #12): the
+	// response should carry the state the issue was created in, not null.
+	if resp.IssueCreate.Issue.State == nil {
+		t.Error("Expected issue state to be hydrated, got nil")
+	} else if resp.IssueCreate.Issue.State.Name != "In Progress" {
+		t.Errorf("Expected state name 'In Progress', got '%s'", resp.IssueCreate.Issue.State.Name)
+	}
+	if resp.IssueCreate.Issue.Priority != 2 {
+		t.Errorf("Expected priority 2, got %d", resp.IssueCreate.Issue.Priority)
 	}
 }
 
@@ -298,6 +322,12 @@ func TestClient_UpdateIssue(t *testing.T) {
 			t.Errorf("Expected issueUpdate mutation, got query: %s", req.Query)
 		}
 
+		// The mutation must request the full issue payload (state, priority, ...)
+		// so that --json output is hydrated (regression for GitHub issue #12).
+		if !strings.Contains(req.Query, "state {") || !strings.Contains(req.Query, "priorityLabel") {
+			t.Errorf("Expected issueUpdate to select the full issue payload (state, priorityLabel), got query: %s", req.Query)
+		}
+
 		input, ok := req.Variables["input"].(map[string]interface{})
 		if !ok {
 			t.Fatalf("Expected input object in variables, got %T", req.Variables["input"])
@@ -330,7 +360,14 @@ func TestClient_UpdateIssue(t *testing.T) {
 						"id": "issue-123",
 						"identifier": "TEST-123",
 						"title": "Updated title",
-						"url": "https://linear.app/test/issue/TEST-123"
+						"priority": 2,
+						"priorityLabel": "High",
+						"url": "https://linear.app/test/issue/TEST-123",
+						"state": {
+							"name": "In Progress",
+							"color": "#f2c94c",
+							"type": "started"
+						}
 					}
 				}
 			}`),
@@ -371,6 +408,17 @@ func TestClient_UpdateIssue(t *testing.T) {
 	}
 	if resp.IssueUpdate.Issue.Identifier != "TEST-123" {
 		t.Errorf("Expected identifier TEST-123, got %s", resp.IssueUpdate.Issue.Identifier)
+	}
+
+	// The updated issue's relations/enums must be hydrated (issue #12): the
+	// response should carry the new state, not null.
+	if resp.IssueUpdate.Issue.State == nil {
+		t.Error("Expected issue state to be hydrated, got nil")
+	} else if resp.IssueUpdate.Issue.State.Name != "In Progress" {
+		t.Errorf("Expected state name 'In Progress', got '%s'", resp.IssueUpdate.Issue.State.Name)
+	}
+	if resp.IssueUpdate.Issue.Priority != 2 {
+		t.Errorf("Expected priority 2, got %d", resp.IssueUpdate.Issue.Priority)
 	}
 }
 
