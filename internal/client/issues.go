@@ -88,6 +88,54 @@ type IssueResponse struct {
 	Issue *Issue `json:"issue"`
 }
 
+// fullIssueSelection is the GraphQL selection set for a complete Issue
+// payload. It is shared by the issue(id:) query and the issueCreate and
+// issueUpdate mutations so that every command that prints an issue returns
+// the same shape — issue update --json must hydrate state/priority exactly
+// like issue view --json does (see GitHub issue #12).
+const fullIssueSelection = `				id
+				identifier
+				title
+				description
+				priority
+				priorityLabel
+				createdAt
+				updatedAt
+				completedAt
+				url
+				state {
+					name
+					color
+					type
+				}
+				assignee {
+					id
+					name
+					email
+				}
+				team {
+					id
+					key
+					name
+				}
+				project {
+					id
+					name
+				}
+				labels {
+					nodes {
+						id
+						name
+						color
+					}
+				}
+				creator {
+					id
+					name
+					email
+				}
+			`
+
 // CommentsResponse is the response for listing comments
 type CommentsResponse struct {
 	Issue *struct {
@@ -244,53 +292,11 @@ func nextPageCursor(currentCursor string, pageInfo PageInfo) (string, bool, erro
 
 // GetIssue retrieves a single issue by ID or identifier
 func (c *Client) GetIssue(ctx context.Context, id string) (*IssueResponse, error) {
-	query := `
-		query($id: String!) {
-			issue(id: $id) {
-				id
-				identifier
-				title
-				description
-				priority
-				priorityLabel
-				createdAt
-				updatedAt
-				completedAt
-				url
-				state {
-					name
-					color
-					type
-				}
-				assignee {
-					id
-					name
-					email
-				}
-				team {
-					id
-					key
-					name
-				}
-				project {
-					id
-					name
-				}
-				labels {
-					nodes {
-						id
-						name
-						color
-					}
-				}
-				creator {
-					id
-					name
-					email
-				}
-			}
-		}
-	`
+	query := `query($id: String!) {
+		issue(id: $id) {
+` + fullIssueSelection + `		}
+	}
+`
 
 	vars := map[string]interface{}{
 		"id": id,
@@ -323,32 +329,21 @@ type CreateIssueInput struct {
 // CreateIssueResponse is the response for creating an issue
 type CreateIssueResponse struct {
 	IssueCreate struct {
-		Success bool `json:"success"`
-		Issue   *struct {
-			ID         string `json:"id"`
-			Identifier string `json:"identifier"`
-			Title      string `json:"title"`
-			URL        string `json:"url"`
-		} `json:"issue"`
+		Success bool   `json:"success"`
+		Issue   *Issue `json:"issue"`
 	} `json:"issueCreate"`
 }
 
 // CreateIssue creates a new issue
 func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (*CreateIssueResponse, error) {
-	query := `
-		mutation($input: IssueCreateInput!) {
-			issueCreate(input: $input) {
-				success
-				issue {
-					id
-					identifier
-					title
-					url
-				}
-			}
+	query := `mutation($input: IssueCreateInput!) {
+		issueCreate(input: $input) {
+			success
+			issue {
+` + fullIssueSelection + `			}
 		}
-	`
-
+	}
+`
 	vars := map[string]interface{}{
 		"input": input,
 	}
@@ -375,32 +370,21 @@ type UpdateIssueInput struct {
 // UpdateIssueResponse is the response for updating an issue
 type UpdateIssueResponse struct {
 	IssueUpdate struct {
-		Success bool `json:"success"`
-		Issue   *struct {
-			ID         string `json:"id"`
-			Identifier string `json:"identifier"`
-			Title      string `json:"title"`
-			URL        string `json:"url"`
-		} `json:"issue"`
+		Success bool   `json:"success"`
+		Issue   *Issue `json:"issue"`
 	} `json:"issueUpdate"`
 }
 
 // UpdateIssue updates an existing issue
 func (c *Client) UpdateIssue(ctx context.Context, id string, input UpdateIssueInput) (*UpdateIssueResponse, error) {
-	query := `
-		mutation($id: String!, $input: IssueUpdateInput!) {
-			issueUpdate(id: $id, input: $input) {
-				success
-				issue {
-					id
-					identifier
-					title
-					url
-				}
-			}
+	query := `mutation($id: String!, $input: IssueUpdateInput!) {
+		issueUpdate(id: $id, input: $input) {
+			success
+			issue {
+` + fullIssueSelection + `			}
 		}
-	`
-
+	}
+`
 	vars := map[string]interface{}{
 		"id":    id,
 		"input": input,
