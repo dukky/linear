@@ -55,6 +55,7 @@ sudo mv linear /usr/local/bin/
 - `auth.go` - Authentication commands (login, status)
 - `issue.go` - Issue commands (list, view, create, update, comments, comment)
 - `team.go` - Team commands (list)
+- `project.go` - Project commands (list, view)
 
 **`internal/auth/`** - Authentication and credential management
 - `auth.go` - API key retrieval with precedence: 1) `LINEAR_API_KEY` env var, 2) system keyring
@@ -65,7 +66,10 @@ sudo mv linear /usr/local/bin/
 - `graphql.go` - Base GraphQL client (`Client.Do()` method)
 - `issues.go` - Issue-related queries/mutations and type definitions
 - `teams.go` - Team-related queries and type definitions
-- Tests: `graphql_test.go`, `issues_test.go`, `teams_test.go`
+- `projects.go` - Project queries (list, by team, lookup by name or UUID) sharing the `fullProjectSelection` field set
+- `states.go` - Workflow state lookup (`GetTeamStates`, `GetStateByName`)
+- `users.go` - User lookup (assignee resolution)
+- Tests: `graphql_test.go`, `issues_test.go`, `teams_test.go`, `projects_test.go`, `states_test.go`, `users_test.go`
 
 **`internal/output/`** - Output formatting utilities
 - `formatter.go` - Table and JSON output formatters
@@ -121,7 +125,7 @@ Key types in `internal/client/`:
 - **Team**: Team with ID, Key, Name, Description
 - **User**: Linear user (assignee, creator)
 - **State**: Issue state (name, color, type)
-- **Project**: Project association
+- **Project**: Project with ID, Name, URL, Description, Status (`ProjectStatus`: name, color, type). Description/Status are `omitempty`: the project nested in issue JSON only selects id/name/url, while project queries select the full `fullProjectSelection`
 - **Label**: Issue labels
 
 Response wrappers:
@@ -147,6 +151,8 @@ Always use `--json` flag when programmatically parsing output:
 - `linear issue update ENG-123 --state "In Progress" --json`
 - `linear issue comments ENG-123 --json`
 - `linear issue comment ENG-123 "message" --json`
+- `linear project list [--team ENG] --json`
+- `linear project view "Mobile App" [--team ENG] --json`
 
 ### Team Keys vs Names
 - Commands use **team keys** (short codes like "ENG", "PROD"), not full names

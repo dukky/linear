@@ -5,31 +5,83 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+// mockProjectFields are the full-selection fields every project mock carries
+// on top of id/name, so hydration of url/description/status can be asserted.
+func mockProjectFields(id, name string) map[string]interface{} {
+	return map[string]interface{}{
+		"id":          id,
+		"name":        name,
+		"url":         "https://linear.app/test/project/" + id,
+		"description": "Description of " + name,
+		"status": map[string]interface{}{
+			"name":  "In Progress",
+			"color": "#f2c94c",
+			"type":  "started",
+		},
+	}
+}
+
+// assertProjectQueryShape checks that an outgoing project query requests the
+// full project selection (url, description, status block).
+func assertProjectQueryShape(t *testing.T, query string) {
+	t.Helper()
+	for _, want := range []string{"url", "description", "status {"} {
+		if !strings.Contains(query, want) {
+			t.Errorf("Expected project query to select %q, got query: %s", want, query)
+		}
+	}
+}
+
+// assertProjectHydrated checks that url/description/status were unmarshalled
+// into the returned Project.
+func assertProjectHydrated(t *testing.T, project *Project) {
+	t.Helper()
+	if project.URL == "" {
+		t.Error("Expected project URL to be hydrated, got empty string")
+	}
+	if project.Description == "" {
+		t.Error("Expected project description to be hydrated, got empty string")
+	}
+	if project.Status == nil {
+		t.Error("Expected project status to be hydrated, got nil")
+	} else if project.Status.Name == "" {
+		t.Error("Expected project status name to be hydrated, got empty string")
+	}
+}
+
+// newProjectTestServer returns a server that records the last query it
+// received and replies with mockResp.
+func newProjectTestServer(t *testing.T, mockResp interface{}, gotQuery *string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("Failed to decode request: %v", err)
+		}
+		*gotQuery = req.Query
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResp)
+	}))
+}
 
 func TestListProjects(t *testing.T) {
 	mockResp := map[string]interface{}{
 		"data": map[string]interface{}{
 			"projects": map[string]interface{}{
 				"nodes": []map[string]interface{}{
-					{
-						"id":   "proj-1",
-						"name": "Project One",
-					},
-					{
-						"id":   "proj-2",
-						"name": "Project Two",
-					},
+					mockProjectFields("proj-1", "Project One"),
+					mockProjectFields("proj-2", "Project Two"),
 				},
 			},
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResp)
-	}))
+	var gotQuery string
+	server := newProjectTestServer(t, mockResp, &gotQuery)
 	defer server.Close()
 
 	client := &Client{
@@ -51,6 +103,11 @@ func TestListProjects(t *testing.T) {
 	if resp.Projects.Nodes[0].ID != "proj-1" {
 		t.Errorf("Expected first project ID to be 'proj-1', got '%s'", resp.Projects.Nodes[0].ID)
 	}
+
+	assertProjectQueryShape(t, gotQuery)
+	for i := range resp.Projects.Nodes {
+		assertProjectHydrated(t, &resp.Projects.Nodes[i])
+	}
 }
 
 func TestGetProjectsByTeam(t *testing.T) {
@@ -58,19 +115,14 @@ func TestGetProjectsByTeam(t *testing.T) {
 		"data": map[string]interface{}{
 			"projects": map[string]interface{}{
 				"nodes": []map[string]interface{}{
-					{
-						"id":   "proj-1",
-						"name": "Team Project",
-					},
+					mockProjectFields("proj-1", "Team Project"),
 				},
 			},
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResp)
-	}))
+	var gotQuery string
+	server := newProjectTestServer(t, mockResp, &gotQuery)
 	defer server.Close()
 
 	client := &Client{
@@ -92,22 +144,20 @@ func TestGetProjectsByTeam(t *testing.T) {
 	if resp.Projects.Nodes[0].Name != "Team Project" {
 		t.Errorf("Expected project name to be 'Team Project', got '%s'", resp.Projects.Nodes[0].Name)
 	}
+
+	assertProjectQueryShape(t, gotQuery)
+	assertProjectHydrated(t, &resp.Projects.Nodes[0])
 }
 
 func TestGetProjectByIdentifier_UUID(t *testing.T) {
 	mockResp := map[string]interface{}{
 		"data": map[string]interface{}{
-			"project": map[string]interface{}{
-				"id":   "4e26961e-967f-458f-8fa2-4240035aa178",
-				"name": "Test Project",
-			},
+			"project": mockProjectFields("4e26961e-967f-458f-8fa2-4240035aa178", "Test Project"),
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResp)
-	}))
+	var gotQuery string
+	server := newProjectTestServer(t, mockResp, &gotQuery)
 	defer server.Close()
 
 	client := &Client{
@@ -129,6 +179,12 @@ func TestGetProjectByIdentifier_UUID(t *testing.T) {
 	if project.Name != "Test Project" {
 		t.Errorf("Expected project name to be 'Test Project', got '%s'", project.Name)
 	}
+
+	if !strings.Contains(gotQuery, "project(id:") {
+		t.Errorf("Expected UUID lookup to use project(id:), got query: %s", gotQuery)
+	}
+	assertProjectQueryShape(t, gotQuery)
+	assertProjectHydrated(t, project)
 }
 
 func TestGetProjectByIdentifier_Name(t *testing.T) {
@@ -136,19 +192,14 @@ func TestGetProjectByIdentifier_Name(t *testing.T) {
 		"data": map[string]interface{}{
 			"projects": map[string]interface{}{
 				"nodes": []map[string]interface{}{
-					{
-						"id":   "proj-123",
-						"name": "Mobile App",
-					},
+					mockProjectFields("proj-123", "Mobile App"),
 				},
 			},
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResp)
-	}))
+	var gotQuery string
+	server := newProjectTestServer(t, mockResp, &gotQuery)
 	defer server.Close()
 
 	client := &Client{
@@ -170,6 +221,12 @@ func TestGetProjectByIdentifier_Name(t *testing.T) {
 	if project.Name != "Mobile App" {
 		t.Errorf("Expected project name to be 'Mobile App', got '%s'", project.Name)
 	}
+
+	if !strings.Contains(gotQuery, "projects(filter:") {
+		t.Errorf("Expected name lookup to use projects(filter:), got query: %s", gotQuery)
+	}
+	assertProjectQueryShape(t, gotQuery)
+	assertProjectHydrated(t, project)
 }
 
 func TestGetProjectByIdentifier_NotFound(t *testing.T) {
