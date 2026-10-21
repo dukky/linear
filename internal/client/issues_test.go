@@ -915,3 +915,138 @@ func TestListAllIssues_DefaultPageSize(t *testing.T) {
 	require.Equal(t, []int{issuePageSize}, firsts)
 	require.Equal(t, 100, firsts[0])
 }
+
+// captureIssueFilter starts a server that records the decoded filter variable
+// of each ListIssues request and returns an empty page. The returned counter
+// reports how many requests reached the server.
+func captureIssueFilter(t *testing.T) (*Client, *map[string]interface{}, *int) {
+	t.Helper()
+	var filter map[string]interface{}
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("Failed to decode request: %v", err)
+			return
+		}
+		filter = nil
+		if raw, ok := req.Variables["filter"]; ok {
+			m, ok := raw.(map[string]interface{})
+			if !ok {
+				t.Errorf("Expected filter to be an object, got %T", raw)
+			}
+			filter = m
+		}
+		json.NewEncoder(w).Encode(issuePage(1, 1, false, "cursor-1"))
+	}))
+	t.Cleanup(server.Close)
+
+	c := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+	return c, &filter, &requests
+}
+
+// filterPath walks nested filter maps by key, failing the test if any level
+// is missing or not an object.
+func filterPath(t *testing.T, filter map[string]interface{}, keys ...string) interface{} {
+	t.Helper()
+	var cur interface{} = filter
+	for i, k := range keys {
+		m, ok := cur.(map[string]interface{})
+		if !ok {
+			t.Fatalf("filter path %v: %v is %T, not an object (filter: %#v)", keys, keys[:i], cur, filter)
+		}
+		cur, ok = m[k]
+		if !ok {
+			t.Fatalf("filter path %v: key %q missing (filter: %#v)", keys, k, filter)
+		}
+	}
+	return cur
+}
+
+func TestClient_ListIssues_AssigneeIsMeFilter(t *testing.T) {
+	c, filter, _ := captureIssueFilter(t)
+
+	_, err := c.ListIssues(context.Background(), ListIssuesOptions{AssigneeIsMe: true, AssigneeEmail: "ignored@example.com"})
+	require.NoError(t, err)
+
+	require.Equal(t, true, filterPath(t, *filter, "assignee", "isMe", "eq"))
+	assignee := filterPath(t, *filter, "assignee").(map[string]interface{})
+	require.NotContains(t, assignee, "email", "isMe must take precedence over email")
+}
+
+func TestClient_ListIssues_AssigneeEmailFilter(t *testing.T) {
+	c, filter, _ := captureIssueFilter(t)
+
+	_, err := c.ListIssues(context.Background(), ListIssuesOptions{AssigneeEmail: "dev@example.com"})
+	require.NoError(t, err)
+
+	require.Equal(t, "dev@example.com", filterPath(t, *filter, "assignee", "email", "eq"))
+}
+
+func TestClient_ListIssues_StateNameFilter(t *testing.T) {
+	c, filter, _ := captureIssueFilter(t)
+
+	_, err := c.ListIssues(context.Background(), ListIssuesOptions{StateName: "In Progress"})
+	require.NoError(t, err)
+
+	require.Equal(t, "In Progress", filterPath(t, *filter, "state", "name", "eqIgnoreCase"))
+}
+
+func TestClient_ListIssues_StateTypesFilter(t *testing.T) {
+	c, filter, _ := captureIssueFilter(t)
+
+	_, err := c.ListIssues(context.Background(), ListIssuesOptions{StateTypes: []string{"started", "unstarted"}})
+	require.NoError(t, err)
+
+	require.Equal(t, []interface{}{"started", "unstarted"}, filterPath(t, *filter, "state", "type", "in"))
+}
+
+func TestClient_ListIssues_StateNameAndTypesCombine(t *testing.T) {
+	c, filter, _ := captureIssueFilter(t)
+
+	_, err := c.ListIssues(context.Background(), ListIssuesOptions{StateName: "Review", StateTypes: []string{"started"}})
+	require.NoError(t, err)
+
+	require.Equal(t, "Review", filterPath(t, *filter, "state", "name", "eqIgnoreCase"))
+	require.Equal(t, []interface{}{"started"}, filterPath(t, *filter, "state", "type", "in"))
+}
+
+// TestListAllIssues_CombinedFilters checks that every filter lands in one
+// IssueFilter object and survives the ListAllIssues paging path.
+func TestListAllIssues_CombinedFilters(t *testing.T) {
+	c, filter, requests := captureIssueFilter(t)
+
+	issues, err := c.ListAllIssues(context.Background(), ListIssuesOptions{
+		TeamKey:       "ENG",
+		ProjectID:     "project-1",
+		AssigneeEmail: "dev@example.com",
+		StateTypes:    []string{"started"},
+		MaxIssues:     5,
+	})
+	require.NoError(t, err)
+	require.Len(t, issues, 1)
+	require.Equal(t, 1, *requests)
+
+	require.Equal(t, "ENG", filterPath(t, *filter, "team", "key", "eq"))
+	require.Equal(t, "project-1", filterPath(t, *filter, "project", "id", "eq"))
+	require.Equal(t, "dev@example.com", filterPath(t, *filter, "assignee", "email", "eq"))
+	require.Equal(t, []interface{}{"started"}, filterPath(t, *filter, "state", "type", "in"))
+	require.Len(t, *filter, 4)
+}
+
+func TestListAllIssues_UnknownStateTypeRejectedBeforeRequest(t *testing.T) {
+	c, _, requests := captureIssueFilter(t)
+
+	_, err := c.ListAllIssues(context.Background(), ListIssuesOptions{StateTypes: []string{"started", "in-review"}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `"in-review"`)
+	for _, v := range ValidStateTypes {
+		require.Contains(t, err.Error(), v)
+	}
+	require.Equal(t, 0, *requests, "invalid state type must be rejected before any request")
+}

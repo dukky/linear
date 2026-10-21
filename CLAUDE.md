@@ -94,6 +94,8 @@ Error handling includes both HTTP errors and GraphQL errors from the response.
 
 `Do()` also applies a per-request timeout (`DefaultRequestTimeout`, 30s, held in the package var `requestTimeout` so tests can shorten it) by deriving a child context for each HTTP request. A caller-supplied deadline still applies. `ListAllIssues` pages at `issuePageSize` (100) per request and honours `ListIssuesOptions.MaxIssues` (0 = unlimited), stopping and trimming once that many issues are collected. `issue list` routes both `--all` and `--limit` through it and uses a context with no overall deadline.
 
+`ListIssuesOptions` filter fields all go into one `IssueFilter` object built in `ListIssues` (so they survive the `ListAllIssues` path): `TeamKey` → `team.key.eq`, `ProjectID` → `project.id.eq`, `AssigneeIsMe` → `assignee.isMe.eq: true` (takes precedence over email), `AssigneeEmail` → `assignee.email.eq`, `StateName` → `state.name.eqIgnoreCase`, `StateTypes` → `state.type.in` (name and type combine in the same `state` object). `ListIssues` validates `StateTypes` with `ValidateStateTypes` against `ValidStateTypes` (triage, backlog, unstarted, started, completed, canceled, duplicate; trimmed and lowercased) before sending any request, returning an error that names the bad value and lists the valid ones. `issue list` exposes these as `--assignee <email|me>`, `--mine`, `--state`, and `--state-type` (StringSlice), validating them (via `resolveListAssignee` and `client.ValidateStateTypes`) before creating a client.
+
 ### Authentication Flow
 
 Priority order in `internal/auth/auth.go`:
@@ -146,6 +148,8 @@ This repository includes `.claude/skills/linear/SKILL.md` which enables automati
 
 Always use `--json` flag when programmatically parsing output:
 - `linear issue list --team ENG --json`
+- `linear issue list --mine --state-type started,unstarted --json` (what's assigned to me)
+- `linear auth status --json` (includes the authenticated `user` {id, name, email} when reachable)
 - `linear issue view ENG-123 --json`
 - `linear issue create --team ENG --title "..." --description "..." --json`
 - `linear issue create --team ENG --title "..." --priority 2 --json`
@@ -178,6 +182,9 @@ vars := map[string]interface{}{
     },
 }
 ```
+
+### Auth Status and the Viewer
+`auth status` works offline: it prints Status/Source, then best-effort calls `Client.GetViewer` (`query { viewer { id name email } }`) under a 10s timeout and prints `User:   Name <email>`. On failure it writes `Could not fetch user: ...` to stderr and still exits 0. `--json` prints `{status, source, user}` (`status` is `authenticated` or `not_authenticated`; `userError` is set when the lookup failed). The lookup is behind the package var `fetchViewer` in `cmd/auth.go` so tests stub it, like `getAuthStatus`.
 
 ### Issue Creation Flow
 Creating issues requires two steps:
