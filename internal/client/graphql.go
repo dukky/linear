@@ -14,6 +14,15 @@ import (
 
 const linearAPIURL = "https://api.linear.app/graphql"
 
+// DefaultRequestTimeout bounds each individual GraphQL request made by Do.
+// Paginated fetches issue many requests, each with its own budget, so a
+// large result set is never cut off by a single overall deadline.
+const DefaultRequestTimeout = 30 * time.Second
+
+// requestTimeout is the per-request timeout applied by Do. It is a variable
+// so tests can shorten it.
+var requestTimeout = DefaultRequestTimeout
+
 // Client is a simple GraphQL client for Linear
 type Client struct {
 	httpClient *http.Client
@@ -64,7 +73,12 @@ func (c *Client) Do(ctx context.Context, query string, variables map[string]inte
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.endpoint, bytes.NewReader(jsonBody))
+	// Each request gets its own deadline. A caller-supplied deadline still
+	// applies because the child context inherits it.
+	reqCtx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "POST", c.endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

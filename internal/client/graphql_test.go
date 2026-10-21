@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -244,5 +245,38 @@ func TestClient_Do_NilResult(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("Expected no error with nil result, got %v", err)
+	}
+}
+
+func TestDo_PerRequestTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-r.Context().Done():
+			return
+		}
+		json.NewEncoder(w).Encode(graphQLResponse{Data: json.RawMessage(`{"test": "value"}`)})
+	}))
+	defer server.Close()
+
+	orig := requestTimeout
+	requestTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { requestTimeout = orig })
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-api-key",
+		endpoint:   server.URL,
+	}
+
+	// context.Background() has no deadline: only the per-request timeout
+	// can stop this request.
+	var result map[string]string
+	err := client.Do(context.Background(), "query { test }", nil, &result)
+	if err == nil {
+		t.Fatal("Expected per-request timeout error, got nil")
+	}
+	if !strings.Contains(err.Error(), "deadline") && !strings.Contains(err.Error(), "context") {
+		t.Errorf("Expected deadline/context error, got %v", err)
 	}
 }

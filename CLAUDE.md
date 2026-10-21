@@ -92,6 +92,8 @@ All GraphQL operations:
 
 Error handling includes both HTTP errors and GraphQL errors from the response.
 
+`Do()` also applies a per-request timeout (`DefaultRequestTimeout`, 30s, held in the package var `requestTimeout` so tests can shorten it) by deriving a child context for each HTTP request. A caller-supplied deadline still applies. `ListAllIssues` pages at `issuePageSize` (100) per request and honours `ListIssuesOptions.MaxIssues` (0 = unlimited), stopping and trimming once that many issues are collected. `issue list` routes both `--all` and `--limit` through it and uses a context with no overall deadline.
+
 ### Authentication Flow
 
 Priority order in `internal/auth/auth.go`:
@@ -161,7 +163,7 @@ Always use `--json` flag when programmatically parsing output:
 ## Important Implementation Notes
 
 ### Context and Timeouts
-All API operations use `context.WithTimeout(context.Background(), 30*time.Second)` to prevent hanging on network issues.
+All API operations use `context.WithTimeout(context.Background(), 30*time.Second)` to prevent hanging on network issues, except `issue list`, which uses `context.WithCancel` with no overall deadline so paginated fetches are not cut off; there, `Client.Do()`'s per-request `DefaultRequestTimeout` bounds each request.
 
 ### GraphQL Variables
 Variables must be properly structured as nested maps for filters:

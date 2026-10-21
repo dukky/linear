@@ -160,7 +160,15 @@ type ListIssuesOptions struct {
 	ProjectID string
 	Limit     int
 	After     string
+	// MaxIssues is the total number of issues ListAllIssues returns across
+	// pages; 0 means unlimited. ListIssues ignores it.
+	MaxIssues int
 }
+
+// issuePageSize is the page size ListAllIssues requests. Linear caps a page
+// at 250; 100 keeps each request light enough to finish well within the
+// per-request timeout.
+const issuePageSize = 100
 
 // ListIssues retrieves issues with optional team filter and pagination
 func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*IssuesResponse, error) {
@@ -222,18 +230,31 @@ func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*Issue
 	return &resp, nil
 }
 
-// ListAllIssues retrieves all issues using cursor-based pagination
+// ListAllIssues retrieves issues using cursor-based pagination, requesting
+// at most issuePageSize issues per page. If opts.MaxIssues > 0 it stops as
+// soon as that many issues have been collected; otherwise it fetches every
+// page.
 func (c *Client) ListAllIssues(ctx context.Context, opts ListIssuesOptions) ([]Issue, error) {
 	var allIssues []Issue
-	opts.Limit = 100 // Use larger page size for efficiency
 
 	for {
+		opts.Limit = issuePageSize
+		if opts.MaxIssues > 0 {
+			if remaining := opts.MaxIssues - len(allIssues); remaining < opts.Limit {
+				opts.Limit = remaining
+			}
+		}
+
 		resp, err := c.ListIssues(ctx, opts)
 		if err != nil {
 			return nil, err
 		}
 
 		allIssues = append(allIssues, resp.Issues.Nodes...)
+
+		if opts.MaxIssues > 0 && len(allIssues) >= opts.MaxIssues {
+			return allIssues[:opts.MaxIssues], nil
+		}
 
 		nextCursor, hasNextPage, err := nextPageCursor(opts.After, resp.Issues.PageInfo)
 		if err != nil {

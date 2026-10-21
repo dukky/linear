@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -811,4 +812,106 @@ func TestNextPageCursor_NoNextPage(t *testing.T) {
 	if cursor != "" {
 		t.Errorf("Expected empty cursor, got %q", cursor)
 	}
+}
+
+// issuePage builds a mock issues page with identifiers TEST-start..TEST-(start+n-1).
+func issuePage(start, n int, hasNext bool, cursor string) graphQLResponse {
+	nodes := make([]map[string]interface{}, 0, n)
+	for i := start; i < start+n; i++ {
+		nodes = append(nodes, map[string]interface{}{
+			"id":         fmt.Sprintf("issue-%d", i),
+			"identifier": fmt.Sprintf("TEST-%d", i),
+			"title":      fmt.Sprintf("Test Issue %d", i),
+		})
+	}
+	data, _ := json.Marshal(map[string]interface{}{
+		"issues": map[string]interface{}{
+			"nodes":    nodes,
+			"pageInfo": map[string]interface{}{"hasNextPage": hasNext, "endCursor": cursor},
+		},
+	})
+	return graphQLResponse{Data: data}
+}
+
+// requestFirst returns the integer "first" variable from a GraphQL request.
+func requestFirst(t *testing.T, req graphQLRequest) int {
+	t.Helper()
+	f, ok := req.Variables["first"].(float64)
+	if !ok {
+		t.Fatalf("Expected numeric first variable, got %#v", req.Variables["first"])
+	}
+	return int(f)
+}
+
+func TestListAllIssues_MaxIssues(t *testing.T) {
+	var requests int
+	var firsts []int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("Failed to decode request: %v", err)
+			return
+		}
+		requests++
+		firsts = append(firsts, requestFirst(t, req))
+
+		// Server ignores first and always serves pages of 2.
+		switch requests {
+		case 1:
+			json.NewEncoder(w).Encode(issuePage(1, 2, true, "cursor-1"))
+		case 2:
+			json.NewEncoder(w).Encode(issuePage(3, 2, true, "cursor-2"))
+		default:
+			json.NewEncoder(w).Encode(issuePage(5, 2, false, "cursor-3"))
+		}
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	issues, err := client.ListAllIssues(context.Background(), ListIssuesOptions{MaxIssues: 3})
+	require.NoError(t, err)
+	require.Len(t, issues, 3)
+	require.Equal(t, "TEST-1", issues[0].Identifier)
+	require.Equal(t, "TEST-3", issues[2].Identifier)
+
+	require.Equal(t, 2, requests, "pagination should stop once MaxIssues is reached; third page must not be fetched")
+	for i, f := range firsts {
+		require.LessOrEqualf(t, f, issuePageSize, "request %d asked for first=%d", i+1, f)
+	}
+	// First request asks for min(100, 3) = 3; second for the remaining 1.
+	require.Equal(t, []int{3, 1}, firsts)
+}
+
+func TestListAllIssues_DefaultPageSize(t *testing.T) {
+	var requests int
+	var firsts []int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("Failed to decode request: %v", err)
+			return
+		}
+		requests++
+		firsts = append(firsts, requestFirst(t, req))
+		json.NewEncoder(w).Encode(issuePage(1, 120, false, "cursor-1"))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	issues, err := client.ListAllIssues(context.Background(), ListIssuesOptions{MaxIssues: 0, Limit: 250})
+	require.NoError(t, err)
+	require.Len(t, issues, 120)
+	require.Equal(t, 1, requests)
+	require.Equal(t, []int{issuePageSize}, firsts)
+	require.Equal(t, 100, firsts[0])
 }

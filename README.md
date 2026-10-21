@@ -150,7 +150,9 @@ linear issue list --team ENG --json
 - `--limit N`: Fetch up to N issues (default: 50)
 - `--all`: Automatically fetch all issues using cursor-based pagination
 
-The default behavior returns up to 50 issues. Use `--limit` to fetch more or fewer issues in a single request, or use `--all` to automatically fetch all issues across multiple pages.
+The default behavior returns up to 50 issues. Use `--limit` to fetch more or fewer issues, or use `--all` to automatically fetch all issues across multiple pages.
+
+Both `--all` and `--limit` values above 100 page through results at 100 issues per request. Each request gets its own 30-second timeout and there is no overall deadline, so large teams no longer time out part-way through. `--limit` also works for values above 250 (Linear's maximum page size), because it is never sent as a single oversized request.
 
 #### `linear issue view <issue-id>`
 View detailed information about a specific issue.

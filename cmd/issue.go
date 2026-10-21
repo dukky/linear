@@ -44,8 +44,12 @@ var issueListCmd = &cobra.Command{
 
 Use --team to filter by team key (e.g., --team ENG).
 Use --project to filter by project name or ID.
-Use --limit to specify the number of issues to fetch (default: 50).
-Use --all to fetch all issues using pagination.`,
+Use --limit to specify the maximum number of issues to fetch (default: 50).
+Use --all to fetch all issues using pagination.
+
+Both --limit and --all page through results at 100 issues per request. Each
+request gets its own 30s timeout and there is no overall deadline, so large
+teams and limits above Linear's 250-per-page cap work.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		c, err := client.NewClient()
 		if err != nil {
@@ -53,7 +57,10 @@ Use --all to fetch all issues using pagination.`,
 			os.Exit(1)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// No overall deadline: Do() bounds every individual request with
+		// client.DefaultRequestTimeout, so paginated fetches of large teams
+		// are not cut off part-way through.
+		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		// Resolve project filter if specified
@@ -83,30 +90,25 @@ Use --all to fetch all issues using pagination.`,
 			projectID = project.ID
 		}
 
-		var issues []client.Issue
-
 		opts := client.ListIssuesOptions{
 			TeamKey:   teamFilter,
 			ProjectID: projectID,
-			Limit:     issueLimit,
 		}
 
-		if fetchAll {
-			// Fetch all issues using pagination
-			allIssues, err := c.ListAllIssues(ctx, opts)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
-				os.Exit(1)
+		if !fetchAll {
+			// --limit means "at most N issues"; ListAllIssues pages at 100
+			// per request so large limits never become one oversized request.
+			limit := issueLimit
+			if limit <= 0 {
+				limit = 50 // preserve the previous default for --limit <= 0
 			}
-			issues = allIssues
-		} else {
-			// Fetch with specified limit
-			resp, err := c.ListIssues(ctx, opts)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
-				os.Exit(1)
-			}
-			issues = resp.Issues.Nodes
+			opts.MaxIssues = limit
+		}
+
+		issues, err := c.ListAllIssues(ctx, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
+			os.Exit(1)
 		}
 
 		if jsonOutput {
