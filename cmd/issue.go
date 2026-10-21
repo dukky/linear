@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/dukky/linear/internal/client"
@@ -29,6 +30,10 @@ var (
 	issueUpdateState       string
 	issueLimit             int
 	fetchAll               bool
+	listAssigneeFilter     string
+	listMineFilter         bool
+	listStateFilter        string
+	listStateTypeFilter    []string
 )
 
 var issueCmd = &cobra.Command{
@@ -44,13 +49,35 @@ var issueListCmd = &cobra.Command{
 
 Use --team to filter by team key (e.g., --team ENG).
 Use --project to filter by project name or ID.
+Use --assignee to filter by assignee email, or --assignee me / --mine for
+issues assigned to the authenticated user.
+Use --state to filter by workflow state name (case-insensitive, e.g. "In Progress").
+Use --state-type to filter by workflow state type; accepts comma-separated
+values or repetition. Valid types: triage, backlog, unstarted, started,
+completed, canceled, duplicate.
 Use --limit to specify the maximum number of issues to fetch (default: 50).
 Use --all to fetch all issues using pagination.
 
 Both --limit and --all page through results at 100 issues per request. Each
 request gets its own 30s timeout and there is no overall deadline, so large
-teams and limits above Linear's 250-per-page cap work.`,
+teams and limits above Linear's 250-per-page cap work.
+
+Examples:
+  linear issue list --team ENG
+  linear issue list --mine --state-type started,unstarted
+  linear issue list --assignee dev@example.com --team ENG`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Validate filter flags before any network access.
+		assigneeIsMe, assigneeEmail, err := resolveListAssignee(listAssigneeFilter, listMineFilter)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := client.ValidateStateTypes(listStateTypeFilter); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
 		c, err := client.NewClient()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -91,8 +118,12 @@ teams and limits above Linear's 250-per-page cap work.`,
 		}
 
 		opts := client.ListIssuesOptions{
-			TeamKey:   teamFilter,
-			ProjectID: projectID,
+			TeamKey:       teamFilter,
+			ProjectID:     projectID,
+			AssigneeEmail: assigneeEmail,
+			AssigneeIsMe:  assigneeIsMe,
+			StateName:     listStateFilter,
+			StateTypes:    listStateTypeFilter,
 		}
 
 		if !fetchAll {
@@ -147,6 +178,25 @@ teams and limits above Linear's 250-per-page cap work.`,
 		}
 		table.Print()
 	},
+}
+
+// resolveListAssignee interprets the issue list --assignee and --mine flags.
+// It returns isMe for the authenticated user, or a non-empty email.
+func resolveListAssignee(assignee string, mine bool) (isMe bool, email string, err error) {
+	assignee = strings.TrimSpace(assignee)
+	if assignee == "" {
+		return mine, "", nil
+	}
+	if strings.EqualFold(assignee, "me") {
+		return true, "", nil
+	}
+	if mine {
+		return false, "", fmt.Errorf("use either --mine or --assignee, not both")
+	}
+	if !strings.Contains(assignee, "@") {
+		return false, "", fmt.Errorf("assignee must be an email address or 'me', got %q", assignee)
+	}
+	return false, assignee, nil
 }
 
 var issueViewCmd = &cobra.Command{
@@ -655,6 +705,10 @@ func init() {
 	issueListCmd.Flags().StringVar(&projectFilter, "project", "", "Filter by project name or ID")
 	issueListCmd.Flags().IntVar(&issueLimit, "limit", 50, "Maximum number of issues to fetch (default: 50)")
 	issueListCmd.Flags().BoolVar(&fetchAll, "all", false, "Fetch all issues using pagination")
+	issueListCmd.Flags().StringVar(&listAssigneeFilter, "assignee", "", "Filter by assignee email, or 'me' for the authenticated user")
+	issueListCmd.Flags().BoolVar(&listMineFilter, "mine", false, "Only issues assigned to the authenticated user (shorthand for --assignee me)")
+	issueListCmd.Flags().StringVar(&listStateFilter, "state", "", "Filter by workflow state name, case-insensitive (e.g., \"In Progress\")")
+	issueListCmd.Flags().StringSliceVar(&listStateTypeFilter, "state-type", nil, "Filter by state type(s), comma-separated or repeated: triage, backlog, unstarted, started, completed, canceled, duplicate")
 
 	issueCreateCmd.Flags().StringVar(&issueTitle, "title", "", "Issue title (required)")
 	issueCreateCmd.Flags().StringVar(&issueDesc, "description", "", "Issue description")

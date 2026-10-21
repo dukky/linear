@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // Issue represents a Linear issue
@@ -163,6 +164,44 @@ type ListIssuesOptions struct {
 	// MaxIssues is the total number of issues ListAllIssues returns across
 	// pages; 0 means unlimited. ListIssues ignores it.
 	MaxIssues int
+	// AssigneeEmail filters to issues assigned to the user with this email.
+	// Ignored when AssigneeIsMe is set.
+	AssigneeEmail string
+	// AssigneeIsMe filters to issues assigned to the authenticated user.
+	AssigneeIsMe bool
+	// StateName filters by workflow state name (case-insensitive).
+	StateName string
+	// StateTypes filters by workflow state type; see ValidStateTypes.
+	StateTypes []string
+}
+
+// ValidStateTypes are the workflow state types Linear accepts in an
+// IssueFilter.state.type comparator.
+var ValidStateTypes = []string{"triage", "backlog", "unstarted", "started", "completed", "canceled", "duplicate"}
+
+// ValidateStateTypes returns an error naming the first value in types that is
+// not one of ValidStateTypes. Values are compared after trimming whitespace
+// and lowercasing.
+func ValidateStateTypes(types []string) error {
+	for _, t := range types {
+		if !isValidStateType(normalizeStateType(t)) {
+			return fmt.Errorf("invalid state type %q: valid values are %s", t, strings.Join(ValidStateTypes, ", "))
+		}
+	}
+	return nil
+}
+
+func normalizeStateType(t string) string {
+	return strings.ToLower(strings.TrimSpace(t))
+}
+
+func isValidStateType(t string) bool {
+	for _, v := range ValidStateTypes {
+		if t == v {
+			return true
+		}
+	}
+	return false
 }
 
 // issuePageSize is the page size ListAllIssues requests. Linear caps a page
@@ -170,8 +209,13 @@ type ListIssuesOptions struct {
 // per-request timeout.
 const issuePageSize = 100
 
-// ListIssues retrieves issues with optional team filter and pagination
+// ListIssues retrieves issues with optional team, project, assignee and
+// state filters and pagination
 func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*IssuesResponse, error) {
+	if err := ValidateStateTypes(opts.StateTypes); err != nil {
+		return nil, err
+	}
+
 	query := `
 		query($filter: IssueFilter, $first: Int!, $after: String) {
 			issues(filter: $filter, first: $first, after: $after) {
@@ -199,7 +243,7 @@ func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*Issue
 		vars["after"] = opts.After
 	}
 
-	// Build filter with optional team and project constraints
+	// Build filter with optional team, project, assignee and state constraints
 	filter := map[string]interface{}{}
 
 	if opts.TeamKey != "" {
@@ -216,6 +260,39 @@ func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*Issue
 				"eq": opts.ProjectID,
 			},
 		}
+	}
+
+	if opts.AssigneeIsMe {
+		filter["assignee"] = map[string]interface{}{
+			"isMe": map[string]interface{}{
+				"eq": true,
+			},
+		}
+	} else if opts.AssigneeEmail != "" {
+		filter["assignee"] = map[string]interface{}{
+			"email": map[string]interface{}{
+				"eq": opts.AssigneeEmail,
+			},
+		}
+	}
+
+	state := map[string]interface{}{}
+	if opts.StateName != "" {
+		state["name"] = map[string]interface{}{
+			"eqIgnoreCase": opts.StateName,
+		}
+	}
+	if len(opts.StateTypes) > 0 {
+		types := make([]string, len(opts.StateTypes))
+		for i, t := range opts.StateTypes {
+			types[i] = normalizeStateType(t)
+		}
+		state["type"] = map[string]interface{}{
+			"in": types,
+		}
+	}
+	if len(state) > 0 {
+		filter["state"] = state
 	}
 
 	if len(filter) > 0 {

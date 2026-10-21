@@ -14,7 +14,7 @@ Manage Linear issues, teams, and projects from the command line.
 
 | Action | Command |
 |--------|---------|
-| List issues | `linear issue list [--team KEY] [--project NAME] [--limit N] [--all] [--json]` |
+| List issues | `linear issue list [--team KEY] [--project NAME] [--assignee EMAIL\|me] [--mine] [--state NAME] [--state-type TYPE,...] [--limit N] [--all] [--json]` |
 | View issue | `linear issue view ID [--json]` |
 | List comments | `linear issue comments ID [--json]` |
 | Add comment | `linear issue comment ID "message" [--json]` |
@@ -23,7 +23,7 @@ Manage Linear issues, teams, and projects from the command line.
 | List teams | `linear team list [--json]` |
 | List projects | `linear project list [--team KEY] [--json]` |
 | View project | `linear project view NAME_OR_ID [--team KEY] [--json]` |
-| Auth status | `linear auth status` |
+| Auth status | `linear auth status [--json]` (prints the authenticated user: who "me" is) |
 
 ## Key Concepts
 
@@ -75,6 +75,12 @@ Project JSON (`project list`/`project view`) includes `url`, `description` and `
 ```bash
 linear issue list --team ENG --json
 ```
+
+**What's assigned to me (open work only):**
+```bash
+linear issue list --mine --state-type started,unstarted --json
+```
+State types: `triage`, `backlog`, `unstarted`, `started`, `completed`, `canceled`, `duplicate`. `--state "In Progress"` matches a state name case-insensitively; `--assignee user@example.com` filters by someone else.
 
 **List issues by project:**
 ```bash

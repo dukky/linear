@@ -41,3 +41,32 @@ func (c *Client) GetUserByEmail(ctx context.Context, email string) (*User, error
 
 	return &userRsp.Users.Nodes[0], nil
 }
+
+// ViewerResponse is the response for the viewer query
+type ViewerResponse struct {
+	Viewer *User `json:"viewer"`
+}
+
+// GetViewer returns the user the API key authenticates as.
+func (c *Client) GetViewer(ctx context.Context) (*User, error) {
+	query := `
+		query {
+			viewer {
+				id
+				name
+				email
+			}
+		}
+	`
+
+	var resp ViewerResponse
+	if err := c.Do(ctx, query, nil, &resp); err != nil {
+		return nil, err
+	}
+
+	if resp.Viewer == nil {
+		return nil, errors.New("no viewer returned for the authenticated API key")
+	}
+
+	return resp.Viewer, nil
+}

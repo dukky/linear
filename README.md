@@ -98,10 +98,14 @@ linear auth login
 ```
 
 #### `linear auth status`
-Check your current authentication status.
+Check your current authentication status. When authenticated it also shows the user the API key belongs to (`User: Name <email>`), fetched best-effort with a 10-second timeout; if the lookup fails (e.g. offline) a note is printed to stderr and the command still succeeds.
 
 ```bash
 linear auth status
+
+# JSON: {"status": "authenticated", "source": "...", "user": {"id", "name", "email"}}
+# or    {"status": "not_authenticated"}
+linear auth status --json
 ```
 
 #### `linear auth logout`
@@ -144,7 +148,22 @@ linear issue list --team ENG --all
 
 # JSON output for automation
 linear issue list --team ENG --json
+
+# What's assigned to me (open work only)
+linear issue list --mine --state-type started,unstarted --json
+
+# Filter by assignee email within a team
+linear issue list --assignee dev@example.com --team ENG
+
+# Filter by workflow state name (case-insensitive)
+linear issue list --team ENG --state "In Progress"
 ```
+
+**Filter options** (all combine with each other and with `--team` / `--project`):
+- `--assignee <email|me>`: Issues assigned to the user with this email; `me` (case-insensitive) means the authenticated user
+- `--mine`: Shorthand for `--assignee me` (cannot be combined with an email `--assignee`)
+- `--state <name>`: Workflow state name, matched case-insensitively
+- `--state-type <type>`: Workflow state type; comma-separated or repeated. One of `triage`, `backlog`, `unstarted`, `started`, `completed`, `canceled`, `duplicate`. Unknown values are rejected before any request is made.
 
 **Pagination options:**
 - `--limit N`: Fetch up to N issues (default: 50)
