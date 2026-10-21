@@ -43,8 +43,18 @@ type User struct {
 
 // Project represents a Linear project
 type Project struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	URL         string         `json:"url"`
+	Description string         `json:"description,omitempty"`
+	Status      *ProjectStatus `json:"status,omitempty"`
+}
+
+// ProjectStatus represents a project's status
+type ProjectStatus struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+	Type  string `json:"type"`
 }
 
 // Label represents an issue label
@@ -91,7 +101,7 @@ type IssueResponse struct {
 // fullIssueSelection is the GraphQL selection set for a complete Issue
 // payload. It is shared by the issue(id:) query and the issueCreate and
 // issueUpdate mutations so that every command that prints an issue returns
-// the same shape — issue update --json must hydrate state/priority exactly
+// the same shape — issue list --json and issue update --json must hydrate state/priority exactly
 // like issue view --json does (see GitHub issue #12).
 const fullIssueSelection = `				id
 				identifier
@@ -121,6 +131,7 @@ const fullIssueSelection = `				id
 				project {
 					id
 					name
+					url
 				}
 				labels {
 					nodes {
@@ -157,42 +168,7 @@ func (c *Client) ListIssues(ctx context.Context, opts ListIssuesOptions) (*Issue
 		query($filter: IssueFilter, $first: Int!, $after: String) {
 			issues(filter: $filter, first: $first, after: $after) {
 				nodes {
-					id
-					identifier
-					title
-					description
-					priority
-					priorityLabel
-					createdAt
-					updatedAt
-					url
-					state {
-						name
-						color
-						type
-					}
-					assignee {
-						id
-						name
-						email
-					}
-					team {
-						id
-						key
-						name
-					}
-					project {
-						id
-						name
-					}
-					labels {
-						nodes {
-							id
-							name
-							color
-						}
-					}
-				}
+` + fullIssueSelection + `				}
 				pageInfo {
 					hasNextPage
 					endCursor

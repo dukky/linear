@@ -22,6 +22,7 @@ Manage Linear issues, teams, and projects from the command line.
 | Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--json]` |
 | List teams | `linear team list [--json]` |
 | List projects | `linear project list [--team KEY] [--json]` |
+| View project | `linear project view NAME_OR_ID [--team KEY] [--json]` |
 | Auth status | `linear auth status` |
 
 ## Key Concepts
@@ -46,7 +47,7 @@ Manage Linear issues, teams, and projects from the command line.
  "state": {"name": "In Progress", "type": "started"},
  "assignee": {"name": "...", "email": "..."},
  "team": {"key": "ENG", "name": "Engineering"},
- "project": {"id": "uuid", "name": "Q1 Goals"},
+ "project": {"id": "uuid", "name": "Q1 Goals", "url": "https://linear.app/..."},
  "labels": {"nodes": [{"name": "bug"}]}}
 ```
 
@@ -57,8 +58,10 @@ Manage Linear issues, teams, and projects from the command line.
 
 ### Project
 ```json
-{"id": "uuid", "name": "Mobile App"}
+{"id": "uuid", "name": "Mobile App", "url": "https://linear.app/...",
+ "description": "...", "status": {"name": "In Progress", "color": "#f2c94c", "type": "started"}}
 ```
+Project JSON (`project list`/`project view`) includes `url`, `description` and `status`; the `project` nested in issue JSON includes `id`, `name` and `url`, so you can link projects as well as issues.
 
 ### Comment
 ```json

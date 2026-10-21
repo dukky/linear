@@ -12,6 +12,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// projectSelectionBlock returns the text between the first "project {" and
+// the next "}" in a GraphQL query, i.e. the fields selected on the issue's
+// nested project. A plain strings.Contains(query, "url") is not enough to
+// prove the project carries url, because issues select their own url too.
+func projectSelectionBlock(t *testing.T, query string) string {
+	t.Helper()
+	const open = "project {"
+	start := strings.Index(query, open)
+	if start == -1 {
+		t.Fatalf("Expected query to contain a %q block, got query: %s", open, query)
+	}
+	start += len(open)
+	end := strings.Index(query[start:], "}")
+	if end == -1 {
+		t.Fatalf("Unterminated %q block in query: %s", open, query)
+	}
+	return query[start : start+end]
+}
+
+// assertIssueProjectSelectsURL checks that the nested project block of an
+// issue query/mutation selects url.
+func assertIssueProjectSelectsURL(t *testing.T, query string) {
+	t.Helper()
+	block := projectSelectionBlock(t, query)
+	if !strings.Contains(block, "url") {
+		t.Errorf("Expected nested project block to select url, got project block: {%s}", block)
+	}
+}
+
+const mockIssueProjectURL = "https://linear.app/test/project/mobile-app-abc123"
+
 func TestClient_ListIssues_NoFilter(t *testing.T) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,6 +56,7 @@ func TestClient_ListIssues_NoFilter(t *testing.T) {
 		if req.Query == "" {
 			t.Error("Expected query to be non-empty")
 		}
+		assertIssueProjectSelectsURL(t, req.Query)
 
 		// Verify the default limit is set
 		if first, ok := req.Variables["first"].(float64); !ok || first != 50 {
@@ -44,7 +76,12 @@ func TestClient_ListIssues_NoFilter(t *testing.T) {
 							"priorityLabel": "High",
 							"createdAt": "2024-01-01T00:00:00Z",
 							"updatedAt": "2024-01-01T00:00:00Z",
-							"url": "https://linear.app/test/issue/TEST-1"
+							"url": "https://linear.app/test/issue/TEST-1",
+							"project": {
+								"id": "proj-123",
+								"name": "Mobile App",
+								"url": "https://linear.app/test/project/mobile-app-abc123"
+							}
 						}
 					],
 					"pageInfo": {
@@ -80,6 +117,13 @@ func TestClient_ListIssues_NoFilter(t *testing.T) {
 
 	if resp.Issues.PageInfo.HasNextPage {
 		t.Error("Expected hasNextPage to be false")
+	}
+
+	if resp.Issues.Nodes[0].Project == nil {
+		t.Fatal("Expected issue project to be hydrated, got nil")
+	}
+	if resp.Issues.Nodes[0].Project.URL != mockIssueProjectURL {
+		t.Errorf("Expected project URL %q, got %q", mockIssueProjectURL, resp.Issues.Nodes[0].Project.URL)
 	}
 }
 
@@ -139,6 +183,7 @@ func TestClient_GetIssue(t *testing.T) {
 		if req.Variables["id"] != "TEST-123" {
 			t.Errorf("Expected id 'TEST-123', got '%v'", req.Variables["id"])
 		}
+		assertIssueProjectSelectsURL(t, req.Query)
 
 		// Return a mock response
 		response := graphQLResponse{
@@ -152,7 +197,12 @@ func TestClient_GetIssue(t *testing.T) {
 					"priorityLabel": "High",
 					"createdAt": "2024-01-01T00:00:00Z",
 					"updatedAt": "2024-01-01T00:00:00Z",
-					"url": "https://linear.app/test/issue/TEST-123"
+					"url": "https://linear.app/test/issue/TEST-123",
+					"project": {
+						"id": "proj-123",
+						"name": "Mobile App",
+						"url": "https://linear.app/test/project/mobile-app-abc123"
+					}
 				}
 			}`),
 		}
@@ -178,6 +228,13 @@ func TestClient_GetIssue(t *testing.T) {
 	if resp.Issue.Identifier != "TEST-123" {
 		t.Errorf("Expected identifier 'TEST-123', got '%s'", resp.Issue.Identifier)
 	}
+
+	if resp.Issue.Project == nil {
+		t.Fatal("Expected issue project to be hydrated, got nil")
+	}
+	if resp.Issue.Project.URL != mockIssueProjectURL {
+		t.Errorf("Expected project URL %q, got %q", mockIssueProjectURL, resp.Issue.Project.URL)
+	}
 }
 
 func TestClient_CreateIssue(t *testing.T) {
@@ -199,6 +256,7 @@ func TestClient_CreateIssue(t *testing.T) {
 		if !strings.Contains(req.Query, "state {") || !strings.Contains(req.Query, "priorityLabel") {
 			t.Errorf("Expected issueCreate to select the full issue payload (state, priorityLabel), got query: %s", req.Query)
 		}
+		assertIssueProjectSelectsURL(t, req.Query)
 
 		reqInput, ok := req.Variables["input"].(map[string]interface{})
 		if !ok {
@@ -227,6 +285,11 @@ func TestClient_CreateIssue(t *testing.T) {
 							"name": "In Progress",
 							"color": "#f2c94c",
 							"type": "started"
+						},
+						"project": {
+							"id": "proj-123",
+							"name": "Mobile App",
+							"url": "https://linear.app/test/project/mobile-app-abc123"
 						}
 					}
 				}
@@ -276,6 +339,13 @@ func TestClient_CreateIssue(t *testing.T) {
 	}
 	if resp.IssueCreate.Issue.Priority != 2 {
 		t.Errorf("Expected priority 2, got %d", resp.IssueCreate.Issue.Priority)
+	}
+
+	if resp.IssueCreate.Issue.Project == nil {
+		t.Fatal("Expected issue project to be hydrated, got nil")
+	}
+	if resp.IssueCreate.Issue.Project.URL != mockIssueProjectURL {
+		t.Errorf("Expected project URL %q, got %q", mockIssueProjectURL, resp.IssueCreate.Issue.Project.URL)
 	}
 }
 
@@ -327,6 +397,7 @@ func TestClient_UpdateIssue(t *testing.T) {
 		if !strings.Contains(req.Query, "state {") || !strings.Contains(req.Query, "priorityLabel") {
 			t.Errorf("Expected issueUpdate to select the full issue payload (state, priorityLabel), got query: %s", req.Query)
 		}
+		assertIssueProjectSelectsURL(t, req.Query)
 
 		input, ok := req.Variables["input"].(map[string]interface{})
 		if !ok {
@@ -367,6 +438,11 @@ func TestClient_UpdateIssue(t *testing.T) {
 							"name": "In Progress",
 							"color": "#f2c94c",
 							"type": "started"
+						},
+						"project": {
+							"id": "proj-123",
+							"name": "Mobile App",
+							"url": "https://linear.app/test/project/mobile-app-abc123"
 						}
 					}
 				}
@@ -419,6 +495,13 @@ func TestClient_UpdateIssue(t *testing.T) {
 	}
 	if resp.IssueUpdate.Issue.Priority != 2 {
 		t.Errorf("Expected priority 2, got %d", resp.IssueUpdate.Issue.Priority)
+	}
+
+	if resp.IssueUpdate.Issue.Project == nil {
+		t.Fatal("Expected issue project to be hydrated, got nil")
+	}
+	if resp.IssueUpdate.Issue.Project.URL != mockIssueProjectURL {
+		t.Errorf("Expected project URL %q, got %q", mockIssueProjectURL, resp.IssueUpdate.Issue.Project.URL)
 	}
 }
 

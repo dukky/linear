@@ -207,6 +207,57 @@ linear issue update ENG-123 --description ""
 linear issue update ENG-123 --title "Updated issue title" --json
 ```
 
+### Project Commands
+
+#### `linear project list`
+List projects in your workspace, optionally filtered by team.
+
+```bash
+# All projects
+linear project list
+
+# Projects accessible to a team
+linear project list --team ENG
+
+# JSON output
+linear project list --json
+```
+
+#### `linear project view <name|id>`
+View a project's details (name, ID, status, URL, description). Names are matched case-insensitively; use `--team` to narrow name matches, or pass the UUID.
+
+```bash
+# By name
+linear project view "Mobile App"
+
+# By name, scoped to a team
+linear project view "Mobile App" --team ENG
+
+# By UUID
+linear project view <uuid>
+
+# JSON output
+linear project view "Mobile App" --json
+```
+
+Example `--json` output:
+
+```json
+{
+  "id": "4e26961e-967f-458f-8fa2-4240035aa178",
+  "name": "Mobile App",
+  "url": "https://linear.app/your-org/project/mobile-app-1a2b3c4d5e6f",
+  "description": "Rebuild the mobile app",
+  "status": {
+    "name": "In Progress",
+    "color": "#f2c94c",
+    "type": "started"
+  }
+}
+```
+
+Project JSON from `project list` uses the same shape. The `project` object embedded in issue JSON (`issue view/list/create/update --json`) carries `id`, `name` and `url`.
+
 ## Claude Code Integration
 
 This CLI is designed to work seamlessly with Claude Code through a skill that enables automatic tool calling.

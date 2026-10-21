@@ -13,15 +13,27 @@ type ProjectsResponse struct {
 	} `json:"projects"`
 }
 
+// fullProjectSelection is the GraphQL selection set for a complete Project
+// payload. It is shared by every project query (list, by-team, by-UUID and
+// by-name lookups) so their shapes cannot drift apart.
+const fullProjectSelection = `					id
+					name
+					url
+					description
+					status {
+						name
+						color
+						type
+					}
+`
+
 // ListProjects retrieves all projects
 func (c *Client) ListProjects(ctx context.Context) (*ProjectsResponse, error) {
 	query := `
 		query {
 			projects {
 				nodes {
-					id
-					name
-				}
+` + fullProjectSelection + `				}
 			}
 		}
 	`
@@ -40,9 +52,7 @@ func (c *Client) GetProjectsByTeam(ctx context.Context, teamID string) (*Project
 		query($filter: ProjectFilter!) {
 			projects(filter: $filter) {
 				nodes {
-					id
-					name
-				}
+` + fullProjectSelection + `				}
 			}
 		}
 	`
@@ -79,9 +89,7 @@ func (c *Client) GetProjectByIdentifier(ctx context.Context, identifier string, 
 		query := `
 			query($id: String!) {
 				project(id: $id) {
-					id
-					name
-				}
+` + fullProjectSelection + `				}
 			}
 		`
 
@@ -109,9 +117,7 @@ func (c *Client) GetProjectByIdentifier(ctx context.Context, identifier string, 
 		query($filter: ProjectFilter!) {
 			projects(filter: $filter) {
 				nodes {
-					id
-					name
-				}
+` + fullProjectSelection + `				}
 			}
 		}
 	`
