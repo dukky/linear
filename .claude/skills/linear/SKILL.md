@@ -37,7 +37,7 @@ Manage Linear issues, teams, and projects from the command line.
 
 **JSON output**: Add `--json` to any command for structured output. Use for parsing/analysis.
 
-**Pagination**: Default limit is 50 issues. Use `--limit N` for custom count, `--all` for complete list.
+**Pagination**: Default limit is 50 issues. Use `--limit N` for custom count (any size, including > 250), `--all` for complete list. Both page at 100 issues per request with a 30s timeout per request and no overall deadline.
 
 ## Data Models
 
