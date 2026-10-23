@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -22,12 +23,17 @@ var (
 	issueAssignee          string
 	issueState             string
 	issuePriority          int
+	issueParent            string
 	issueUpdateTitle       string
 	issueUpdateDesc        string
 	issueUpdatePriority    int
 	issueUpdateProject     string
 	issueUpdateAssignee    string
 	issueUpdateState       string
+	issueUpdateParent      string
+	issueUpdateBlocks      []string
+	issueUpdateBlockedBy   []string
+	issueUpdateRelated     []string
 	issueLimit             int
 	fetchAll               bool
 	listAssigneeFilter     string
@@ -287,7 +293,87 @@ Examples:
 				fmt.Printf("  - %s\n", label.Name)
 			}
 		}
+
+		relations := formatRelations(issue.Relations, issue.InverseRelations)
+
+		var children []string
+		if issue.Children != nil {
+			for _, child := range issue.Children.Nodes {
+				children = append(children, child.Identifier+" "+child.Title)
+			}
+		}
+
+		if issue.Parent != nil || len(children) > 0 || len(relations) > 0 {
+			fmt.Println()
+		}
+
+		if issue.Parent != nil {
+			fmt.Printf("Parent:      %s %s\n", issue.Parent.Identifier, issue.Parent.Title)
+		}
+
+		if len(children) > 0 {
+			fmt.Printf("Sub-issues:  %s\n", strings.Join(children, ", "))
+		}
+
+		if len(relations) > 0 {
+			fmt.Printf("Relations:   %s\n", strings.Join(relations, ", "))
+		}
 	},
+}
+
+// formatRelations renders an issue's relation edges for issue view text
+// output, outgoing first. Each entry names the other endpoint: relatedIssue
+// for an outgoing edge (from Issue.relations), issue for an incoming edge
+// (from Issue.inverseRelations). A blocks edge reads "blocks X" outgoing and
+// "blocked by X" incoming; related is symmetric and reads "related X" either
+// way. Other relation types read "<type> X" outgoing and "<type> from X"
+// incoming. An edge whose ID has already been rendered is skipped, so the
+// same edge is never printed twice. A nil connection (not selected) renders
+// as nothing.
+func formatRelations(outgoing, incoming *client.IssueRelationConnection) []string {
+	var entries []string
+	seen := map[string]bool{}
+
+	identifier := func(ref *client.IssueRef) string {
+		if ref == nil || ref.Identifier == "" {
+			return "?"
+		}
+		return ref.Identifier
+	}
+
+	add := func(rel client.IssueRelation, entry string) {
+		if rel.ID != "" {
+			if seen[rel.ID] {
+				return
+			}
+			seen[rel.ID] = true
+		}
+		entries = append(entries, entry)
+	}
+
+	if outgoing != nil {
+		for _, rel := range outgoing.Nodes {
+			add(rel, rel.Type+" "+identifier(rel.RelatedIssue))
+		}
+	}
+
+	if incoming == nil {
+		return entries
+	}
+
+	for _, rel := range incoming.Nodes {
+		other := identifier(rel.Issue)
+		switch rel.Type {
+		case client.RelationTypeBlocks:
+			add(rel, "blocked by "+other)
+		case client.RelationTypeRelated:
+			add(rel, "related "+other)
+		default:
+			add(rel, rel.Type+" from "+other)
+		}
+	}
+
+	return entries
 }
 
 var issueCreateCmd = &cobra.Command{
@@ -300,7 +386,8 @@ Examples:
   linear issue create --team ENG --title "New feature" --project "Mobile App"
   linear issue create --team ENG --title "Task" --project "4e26961e-967f-458f-8fa2-4240035aa178"
   linear issue create --team ENG --title "New task" --state "In Progress"
-  linear issue create --team ENG --title "New task" --priority 2`,
+  linear issue create --team ENG --title "New task" --priority 2
+  linear issue create --team ENG --title "Sub-task" --parent ENG-123`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if issueTitle == "" {
 			fmt.Fprintln(os.Stderr, "Error: --title is required")
@@ -313,6 +400,11 @@ Examples:
 		}
 
 		priorityChanged := cmd.Flags().Changed("priority")
+
+		if cmd.Flags().Changed("parent") && issueParent == "" {
+			fmt.Fprintln(os.Stderr, "Error: --parent cannot be empty")
+			os.Exit(1)
+		}
 
 		if priorityChanged && (issuePriority < 0 || issuePriority > 4) {
 			fmt.Fprintln(os.Stderr, "Error: --priority must be between 0 and 4")
@@ -368,6 +460,23 @@ Examples:
 		input := client.CreateIssueInput{
 			Title:  issueTitle,
 			TeamID: teamID,
+		}
+
+		// Resolve parent if specified: parentId must be a UUID, so an
+		// identifier such as ENG-123 is looked up first.
+		var parent *client.Issue
+		if issueParent != "" {
+			parentResp, err := c.GetIssue(ctx, issueParent)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error fetching parent issue: %v\n", err)
+				os.Exit(1)
+			}
+			if parentResp.Issue == nil {
+				fmt.Fprintf(os.Stderr, "Parent issue not found: %s\n", issueParent)
+				os.Exit(1)
+			}
+			input.ParentID = parentResp.Issue.ID
+			parent = parentResp.Issue
 		}
 
 		if issueDesc != "" {
@@ -426,6 +535,10 @@ Examples:
 		fmt.Printf("ID:    %s\n", issue.Identifier)
 		fmt.Printf("Title: %s\n", issue.Title)
 		fmt.Printf("URL:   %s\n", issue.URL)
+
+		if parent != nil {
+			fmt.Printf("Parent: %s %s\n", parent.Identifier, parent.Title)
+		}
 	},
 }
 
@@ -440,157 +553,329 @@ Examples:
   linear issue update ENG-123 --priority 1
   linear issue update ENG-123 --project "Mobile App"
   linear issue update ENG-123 --assignee "user@example.com"
-  linear issue update ENG-123 --state "Done"`,
+  linear issue update ENG-123 --state "Done"
+  linear issue update ENG-123 --parent ENG-100
+  linear issue update ENG-123 --blocks ENG-124 --blocks ENG-125
+  linear issue update ENG-123 --blocked-by ENG-120 --related ENG-130
+
+--blocks, --blocked-by and --related are repeatable; each value is a single
+issue (values are not split on commas).`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		issueID := args[0]
-
-		titleChanged := cmd.Flags().Changed("title")
-		descriptionChanged := cmd.Flags().Changed("description")
-		priorityChanged := cmd.Flags().Changed("priority")
-		projectChanged := cmd.Flags().Changed("project")
-		assigneeChanged := cmd.Flags().Changed("assignee")
-		stateChanged := cmd.Flags().Changed("state")
-
-		if !titleChanged && !descriptionChanged && !priorityChanged && !projectChanged && !assigneeChanged && !stateChanged {
-			fmt.Fprintln(os.Stderr, "Error: specify at least one field to update (--title, --description, --priority, --project, --assignee, --state)")
+		if err := runIssueUpdate(cmd, args); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
 			os.Exit(1)
 		}
+	},
+}
 
-		if titleChanged && issueUpdateTitle == "" {
-			fmt.Fprintln(os.Stderr, "Error: --title cannot be empty")
-			os.Exit(1)
+// runIssueUpdate implements issue update. Every failure is returned as an
+// error whose text is exactly what the command prints to stderr, so tests can
+// assert on it without the process exiting.
+func runIssueUpdate(cmd *cobra.Command, args []string) error {
+	issueID := args[0]
+
+	titleChanged := cmd.Flags().Changed("title")
+	descriptionChanged := cmd.Flags().Changed("description")
+	priorityChanged := cmd.Flags().Changed("priority")
+	projectChanged := cmd.Flags().Changed("project")
+	assigneeChanged := cmd.Flags().Changed("assignee")
+	stateChanged := cmd.Flags().Changed("state")
+	parentChanged := cmd.Flags().Changed("parent")
+	blocksChanged := len(issueUpdateBlocks) > 0
+	blockedByChanged := len(issueUpdateBlockedBy) > 0
+	relatedChanged := len(issueUpdateRelated) > 0
+	relationsChanged := blocksChanged || blockedByChanged || relatedChanged
+
+	if !titleChanged && !descriptionChanged && !priorityChanged && !projectChanged && !assigneeChanged && !stateChanged && !parentChanged && !blocksChanged && !blockedByChanged && !relatedChanged {
+		return errors.New("Error: specify at least one field to update (--title, --description, --priority, --project, --assignee, --state, --parent, --blocks, --blocked-by, --related)")
+	}
+
+	if titleChanged && issueUpdateTitle == "" {
+		return errors.New("Error: --title cannot be empty")
+	}
+
+	if parentChanged && issueUpdateParent == "" {
+		return errors.New("Error: --parent cannot be empty")
+	}
+
+	for _, relationFlag := range []struct {
+		name   string
+		values []string
+	}{
+		{"--blocks", issueUpdateBlocks},
+		{"--blocked-by", issueUpdateBlockedBy},
+		{"--related", issueUpdateRelated},
+	} {
+		for _, value := range relationFlag.values {
+			if value == "" {
+				return fmt.Errorf("Error: %s values cannot be empty", relationFlag.name)
+			}
 		}
+	}
 
-		if projectChanged && issueUpdateProject == "" {
-			fmt.Fprintln(os.Stderr, "Error: --project cannot be empty")
-			os.Exit(1)
+	if projectChanged && issueUpdateProject == "" {
+		return errors.New("Error: --project cannot be empty")
+	}
+
+	if stateChanged && issueUpdateState == "" {
+		return errors.New("Error: --state cannot be empty")
+	}
+
+	if priorityChanged && (issueUpdatePriority < 0 || issueUpdatePriority > 4) {
+		return errors.New("Error: --priority must be between 0 and 4")
+	}
+
+	c, err := client.NewClient()
+	if err != nil {
+		return fmt.Errorf("Error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	input := client.UpdateIssueInput{}
+
+	if titleChanged {
+		input.Title = &issueUpdateTitle
+	}
+
+	if descriptionChanged {
+		input.Description = &issueUpdateDesc
+	}
+
+	if priorityChanged {
+		input.Priority = &issueUpdatePriority
+	}
+
+	if assigneeChanged {
+		if issueUpdateAssignee == "" {
+			return errors.New("Error: --assignee must not be empty")
 		}
-
-		if stateChanged && issueUpdateState == "" {
-			fmt.Fprintln(os.Stderr, "Error: --state cannot be empty")
-			os.Exit(1)
-		}
-
-		if priorityChanged && (issueUpdatePriority < 0 || issueUpdatePriority > 4) {
-			fmt.Fprintln(os.Stderr, "Error: --priority must be between 0 and 4")
-			os.Exit(1)
-		}
-
-		c, err := client.NewClient()
+		user, err := c.GetUserByEmail(ctx, issueUpdateAssignee)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("Error fetching user by email: %v", err)
+		}
+		input.AssigneeID = &user.ID
+	}
+
+	// Project and state resolution are both scoped to the issue's own team
+	// (which may differ from any --team used elsewhere), and relations need
+	// the issue's UUID as an endpoint, so fetch the issue once up front and
+	// reuse it for all three.
+	var fetchedIssue *client.Issue
+	if projectChanged || stateChanged || relationsChanged {
+		issueResp, err := c.GetIssue(ctx, issueID)
+		if err != nil {
+			return fmt.Errorf("Error fetching issue: %v", err)
+		}
+		if issueResp.Issue == nil {
+			return fmt.Errorf("Issue not found: %s", issueID)
+		}
+		fetchedIssue = issueResp.Issue
+
+		teamID := ""
+		if issueResp.Issue.Team != nil {
+			teamID = issueResp.Issue.Team.ID
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		input := client.UpdateIssueInput{}
-
-		if titleChanged {
-			input.Title = &issueUpdateTitle
-		}
-
-		if descriptionChanged {
-			input.Description = &issueUpdateDesc
-		}
-
-		if priorityChanged {
-			input.Priority = &issueUpdatePriority
-		}
-
-		if assigneeChanged {
-			if issueUpdateAssignee == "" {
-				fmt.Fprintf(os.Stderr, "Error: --assignee must not be empty\n")
-				os.Exit(1)
-			} else {
-				user, err := c.GetUserByEmail(ctx, issueUpdateAssignee)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error fetching user by email: %v\n", err)
-					os.Exit(1)
-				}
-				input.AssigneeID = &user.ID
-			}
-		}
-
-		// Project and state resolution are both scoped to the issue's own team
-		// (which may differ from any --team used elsewhere), so fetch the issue
-		// once up front and reuse it for both.
-		if projectChanged || stateChanged {
-			issueResp, err := c.GetIssue(ctx, issueID)
+		if projectChanged {
+			project, err := c.GetProjectByIdentifier(ctx, issueUpdateProject, teamID)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error fetching issue: %v\n", err)
-				os.Exit(1)
-			}
-			if issueResp.Issue == nil {
-				fmt.Fprintf(os.Stderr, "Issue not found: %s\n", issueID)
-				os.Exit(1)
+				return fmt.Errorf("Error fetching project: %v\nTip: Run 'linear project list' to see available projects", err)
 			}
 
-			teamID := ""
-			if issueResp.Issue.Team != nil {
-				teamID = issueResp.Issue.Team.ID
-			}
-
-			if projectChanged {
-				project, err := c.GetProjectByIdentifier(ctx, issueUpdateProject, teamID)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error fetching project: %v\n", err)
-					fmt.Fprintln(os.Stderr, "Tip: Run 'linear project list' to see available projects")
-					os.Exit(1)
-				}
-
-				input.ProjectID = &project.ID
-			}
-
-			if stateChanged {
-				if teamID == "" {
-					fmt.Fprintln(os.Stderr, "Error: could not determine issue's team to resolve state")
-					os.Exit(1)
-				}
-
-				state, err := c.GetStateByName(ctx, teamID, issueUpdateState)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error fetching state: %v\n", err)
-					os.Exit(1)
-				}
-
-				input.StateID = &state.ID
-			}
+			input.ProjectID = &project.ID
 		}
 
+		if stateChanged {
+			if teamID == "" {
+				return errors.New("Error: could not determine issue's team to resolve state")
+			}
+
+			state, err := c.GetStateByName(ctx, teamID, issueUpdateState)
+			if err != nil {
+				return fmt.Errorf("Error fetching state: %v", err)
+			}
+
+			input.StateID = &state.ID
+		}
+	}
+
+	// parentId must be a UUID, so resolve identifiers such as ENG-123.
+	var parent *client.Issue
+	if parentChanged {
+		parentResp, err := c.GetIssue(ctx, issueUpdateParent)
+		if err != nil {
+			return fmt.Errorf("Error fetching parent issue: %v", err)
+		}
+		if parentResp.Issue == nil {
+			return fmt.Errorf("Parent issue not found: %s", issueUpdateParent)
+		}
+		parent = parentResp.Issue
+		input.ParentID = &parent.ID
+	}
+
+	// Resolve every relation target before any write, so a mistyped
+	// identifier fails the command without leaving a partial update.
+	var relationRequests []relationRequest
+	if relationsChanged {
+		resolve := func(id string) (string, error) {
+			resp, err := c.GetIssue(ctx, id)
+			if err != nil {
+				return "", err
+			}
+			if resp.Issue == nil {
+				return "", fmt.Errorf("issue not found: %s", id)
+			}
+			return resp.Issue.ID, nil
+		}
+		relationRequests, err = buildRelationInputs(fetchedIssue.ID, issueUpdateBlocks, issueUpdateBlockedBy, issueUpdateRelated, resolve)
+		if err != nil {
+			return fmt.Errorf("Error: %v", err)
+		}
+	}
+
+	// issue is what the text output describes. A relations-only update
+	// sends no issueUpdate mutation, so it falls back to the issue fetched
+	// above (identifier, title and URL are unaffected by relations).
+	issue := fetchedIssue
+
+	fieldsChanged := titleChanged || descriptionChanged || priorityChanged || projectChanged || assigneeChanged || stateChanged || parentChanged
+	if fieldsChanged {
 		resp, err := c.UpdateIssue(ctx, issueID, input)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error updating issue: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("Error updating issue: %v", err)
 		}
 
 		if !resp.IssueUpdate.Success {
-			fmt.Fprintln(os.Stderr, "Error: Failed to update issue")
-			os.Exit(1)
+			return errors.New("Error: Failed to update issue")
 		}
 
 		if resp.IssueUpdate.Issue == nil {
-			fmt.Fprintln(os.Stderr, "Error: Issue was updated but no details returned")
-			os.Exit(1)
+			return errors.New("Error: Issue was updated but no details returned")
 		}
 
-		issue := resp.IssueUpdate.Issue
+		issue = resp.IssueUpdate.Issue
+	}
 
-		if jsonOutput {
-			if err := output.PrintJSON(issue); err != nil {
-				fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
-				os.Exit(1)
+	var created []*client.IssueRelation
+	for _, req := range relationRequests {
+		// Errors name the issue as the user typed it (req.Target), not the
+		// resolved UUID.
+		relResp, err := c.CreateIssueRelation(ctx, req.Input)
+		if err != nil {
+			return fmt.Errorf("Error creating %s relation with %s: %v", req.Input.Type, req.Target, err)
+		}
+		if !relResp.IssueRelationCreate.Success || relResp.IssueRelationCreate.IssueRelation == nil {
+			return fmt.Errorf("Error: Failed to create %s relation with %s", req.Input.Type, req.Target)
+		}
+		created = append(created, relResp.IssueRelationCreate.IssueRelation)
+	}
+
+	if jsonOutput {
+		// The update result predates any relations created above, so
+		// re-fetch to print an issue that includes them.
+		if len(created) > 0 {
+			issueResp, err := c.GetIssue(ctx, issueID)
+			if err != nil {
+				return fmt.Errorf("Error fetching updated issue: %v", err)
 			}
-			return
+			if issueResp.Issue == nil {
+				return fmt.Errorf("Issue not found: %s", issueID)
+			}
+			issue = issueResp.Issue
 		}
 
-		fmt.Printf("Issue updated successfully!\n")
-		fmt.Printf("ID:    %s\n", issue.Identifier)
-		fmt.Printf("Title: %s\n", issue.Title)
-		fmt.Printf("URL:   %s\n", issue.URL)
-	},
+		if err := output.PrintJSON(issue); err != nil {
+			return fmt.Errorf("Error formatting output: %v", err)
+		}
+		return nil
+	}
+
+	fmt.Printf("Issue updated successfully!\n")
+	fmt.Printf("ID:    %s\n", issue.Identifier)
+	fmt.Printf("Title: %s\n", issue.Title)
+	fmt.Printf("URL:   %s\n", issue.URL)
+
+	for _, rel := range created {
+		from, to := "?", "?"
+		if rel.Issue != nil {
+			from = rel.Issue.Identifier
+		}
+		if rel.RelatedIssue != nil {
+			to = rel.RelatedIssue.Identifier
+		}
+		fmt.Printf("Relation created: %s %s %s\n", from, rel.Type, to)
+	}
+
+	if parent != nil {
+		fmt.Printf("Parent: %s %s\n", parent.Identifier, parent.Title)
+	}
+
+	return nil
+}
+
+// relationRequest pairs an issueRelationCreate input with the target issue as
+// the user typed it on the command line (e.g. ENG-123), so errors can name
+// the issue the user recognises rather than its resolved UUID.
+type relationRequest struct {
+	Input  client.CreateIssueRelationInput
+	Target string
+}
+
+// buildRelationInputs translates the repeatable relation flags into
+// issueRelationCreate inputs. Linear stores a blocks edge on the blocking
+// issue, so --blocked-by is the same relation with the endpoints swapped.
+func buildRelationInputs(currentID string, blocks, blockedBy, related []string, resolve func(string) (string, error)) ([]relationRequest, error) {
+	requests := make([]relationRequest, 0, len(blocks)+len(blockedBy)+len(related))
+
+	for _, target := range blocks {
+		targetID, err := resolve(target)
+		if err != nil {
+			return nil, fmt.Errorf("resolving --blocks issue %s: %w", target, err)
+		}
+		requests = append(requests, relationRequest{
+			Input: client.CreateIssueRelationInput{
+				IssueID:        currentID,
+				RelatedIssueID: targetID,
+				Type:           client.RelationTypeBlocks,
+			},
+			Target: target,
+		})
+	}
+
+	for _, target := range blockedBy {
+		targetID, err := resolve(target)
+		if err != nil {
+			return nil, fmt.Errorf("resolving --blocked-by issue %s: %w", target, err)
+		}
+		requests = append(requests, relationRequest{
+			Input: client.CreateIssueRelationInput{
+				IssueID:        targetID,
+				RelatedIssueID: currentID,
+				Type:           client.RelationTypeBlocks,
+			},
+			Target: target,
+		})
+	}
+
+	for _, target := range related {
+		targetID, err := resolve(target)
+		if err != nil {
+			return nil, fmt.Errorf("resolving --related issue %s: %w", target, err)
+		}
+		requests = append(requests, relationRequest{
+			Input: client.CreateIssueRelationInput{
+				IssueID:        currentID,
+				RelatedIssueID: targetID,
+				Type:           client.RelationTypeRelated,
+			},
+			Target: target,
+		})
+	}
+
+	return requests, nil
 }
 
 var issueCommentCmd = &cobra.Command{
@@ -717,6 +1002,7 @@ func init() {
 	issueCreateCmd.Flags().StringVar(&issueAssignee, "assignee", "", "Issue Assignee (email, optional)")
 	issueCreateCmd.Flags().StringVar(&issueState, "state", "", "Issue state/workflow status name, matched case-insensitively within the team (optional, e.g., \"In Progress\")")
 	issueCreateCmd.Flags().IntVar(&issuePriority, "priority", 0, "Issue priority (0-4, optional)")
+	issueCreateCmd.Flags().StringVar(&issueParent, "parent", "", "Parent issue identifier or ID, making this a sub-issue (optional)")
 
 	issueUpdateCmd.Flags().StringVar(&issueUpdateTitle, "title", "", "Updated issue title")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateDesc, "description", "", "Updated issue description (use empty string to clear)")
@@ -724,6 +1010,10 @@ func init() {
 	issueUpdateCmd.Flags().StringVar(&issueUpdateProject, "project", "", "Updated project name or ID")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateAssignee, "assignee", "", "Updated issue assignee (email)")
 	issueUpdateCmd.Flags().StringVar(&issueUpdateState, "state", "", "Updated issue state/workflow status name, matched case-insensitively within the issue's team")
+	issueUpdateCmd.Flags().StringVar(&issueUpdateParent, "parent", "", "Parent issue identifier or ID, making this a sub-issue")
+	issueUpdateCmd.Flags().StringArrayVar(&issueUpdateBlocks, "blocks", nil, "Issue this issue blocks, by identifier or ID (repeatable)")
+	issueUpdateCmd.Flags().StringArrayVar(&issueUpdateBlockedBy, "blocked-by", nil, "Issue that blocks this issue, by identifier or ID (repeatable)")
+	issueUpdateCmd.Flags().StringArrayVar(&issueUpdateRelated, "related", nil, "Related issue, by identifier or ID (repeatable)")
 
 	issueCmd.AddCommand(issueListCmd)
 	issueCmd.AddCommand(issueViewCmd)

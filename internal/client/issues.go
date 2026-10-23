@@ -8,25 +8,72 @@ import (
 
 // Issue represents a Linear issue
 type Issue struct {
-	ID            string   `json:"id"`
-	Identifier    string   `json:"identifier"`
-	Title         string   `json:"title"`
-	Description   *string  `json:"description"`
-	Priority      int      `json:"priority"`
-	PriorityLabel string   `json:"priorityLabel"`
-	CreatedAt     string   `json:"createdAt"`
-	UpdatedAt     string   `json:"updatedAt"`
-	CompletedAt   *string  `json:"completedAt"`
-	URL           string   `json:"url"`
-	State         *State   `json:"state"`
-	Assignee      *User    `json:"assignee"`
-	Creator       *User    `json:"creator"`
-	Team          *Team    `json:"team"`
-	Project       *Project `json:"project"`
+	ID            string    `json:"id"`
+	Identifier    string    `json:"identifier"`
+	Title         string    `json:"title"`
+	Description   *string   `json:"description"`
+	Priority      int       `json:"priority"`
+	PriorityLabel string    `json:"priorityLabel"`
+	CreatedAt     string    `json:"createdAt"`
+	UpdatedAt     string    `json:"updatedAt"`
+	CompletedAt   *string   `json:"completedAt"`
+	URL           string    `json:"url"`
+	State         *State    `json:"state"`
+	Assignee      *User     `json:"assignee"`
+	Creator       *User     `json:"creator"`
+	Team          *Team     `json:"team"`
+	Project       *Project  `json:"project"`
+	Parent        *IssueRef `json:"parent"`
 	Labels        struct {
 		Nodes []Label `json:"nodes"`
 	} `json:"labels"`
+	// Children, Relations and InverseRelations are only selected by
+	// single-issue queries and mutations (see fullIssueWithLinksSelection).
+	// They are nil, and omitted from JSON, when not selected (issue list), so
+	// "not fetched" is distinguishable from "no links" (empty nodes).
+	Children *IssueConnection `json:"children,omitempty"`
+	// Relations are the outgoing edges: this issue is each node's Issue.
+	Relations *IssueRelationConnection `json:"relations,omitempty"`
+	// InverseRelations are the incoming edges: this issue is each node's
+	// RelatedIssue. A --blocked-by relation is stored on the blocking issue,
+	// so it reads back here on the blocked issue.
+	InverseRelations *IssueRelationConnection `json:"inverseRelations,omitempty"`
 }
+
+// IssueConnection is a connection of issue refs (e.g. an issue's children).
+type IssueConnection struct {
+	Nodes []IssueRef `json:"nodes"`
+}
+
+// IssueRelationConnection is a connection of issue relations.
+type IssueRelationConnection struct {
+	Nodes []IssueRelation `json:"nodes"`
+}
+
+// IssueRef is the lightweight summary of a related issue (a parent, a child or
+// one endpoint of an issue relation). Links use a ref rather than a full Issue
+// so that parent, children and relations can be selected without recursing.
+type IssueRef struct {
+	ID         string `json:"id"`
+	Identifier string `json:"identifier"`
+	Title      string `json:"title"`
+	URL        string `json:"url,omitempty"`
+}
+
+// IssueRelation is a directed relation between two issues. For a blocks
+// relation, Issue blocks RelatedIssue.
+type IssueRelation struct {
+	ID           string    `json:"id"`
+	Type         string    `json:"type"`
+	Issue        *IssueRef `json:"issue"`
+	RelatedIssue *IssueRef `json:"relatedIssue"`
+}
+
+// Relation types accepted by IssueRelationCreateInput.type.
+const (
+	RelationTypeBlocks  = "blocks"
+	RelationTypeRelated = "related"
+)
 
 // State represents an issue state
 type State struct {
@@ -134,6 +181,12 @@ const fullIssueSelection = `				id
 					name
 					url
 				}
+				parent {
+					id
+					identifier
+					title
+					url
+				}
 				labels {
 					nodes {
 						id
@@ -147,6 +200,65 @@ const fullIssueSelection = `				id
 					email
 				}
 			`
+
+// issueLinksSelection selects an issue's sub-issues and its outgoing
+// (relations) and incoming (inverseRelations) relation edges. Each node is an
+// IssueRef-shaped summary so the selection never recurses.
+const issueLinksSelection = `				children(first: 50) {
+					nodes {
+						id
+						identifier
+						title
+						url
+					}
+				}
+				relations(first: 50) {
+					nodes {
+						id
+						type
+						issue {
+							id
+							identifier
+							title
+							url
+						}
+						relatedIssue {
+							id
+							identifier
+							title
+							url
+						}
+					}
+				}
+				inverseRelations(first: 50) {
+					nodes {
+						id
+						type
+						issue {
+							id
+							identifier
+							title
+							url
+						}
+						relatedIssue {
+							id
+							identifier
+							title
+							url
+						}
+					}
+				}
+			`
+
+// fullIssueWithLinksSelection is fullIssueSelection plus children, relations
+// and inverseRelations. It is used for single-issue queries and mutations
+// (view, create, update). issue list deliberately keeps plain
+// fullIssueSelection: every listed issue would carry three nested
+// connections, so a 100-issue page would fan out into 300 nested
+// connections, which is what made list pagination fragile in #18. The
+// connection fields on Issue are pointers so list output omits them rather
+// than reporting empty links.
+const fullIssueWithLinksSelection = fullIssueSelection + issueLinksSelection
 
 // CommentsResponse is the response for listing comments
 type CommentsResponse struct {
@@ -368,7 +480,7 @@ func nextPageCursor(currentCursor string, pageInfo PageInfo) (string, bool, erro
 func (c *Client) GetIssue(ctx context.Context, id string) (*IssueResponse, error) {
 	query := `query($id: String!) {
 		issue(id: $id) {
-` + fullIssueSelection + `		}
+` + fullIssueWithLinksSelection + `		}
 	}
 `
 
@@ -395,6 +507,7 @@ type CreateIssueInput struct {
 	ProjectID     string   `json:"projectId,omitempty"`
 	AssigneeID    string   `json:"assigneeId,omitempty"`
 	StateID       string   `json:"stateId,omitempty"`
+	ParentID      string   `json:"parentId,omitempty"`
 	Priority      *int     `json:"priority,omitempty"`
 	LabelIds      []string `json:"labelIds,omitempty"`
 	SubscriberIds []string `json:"subscriberIds,omitempty"`
@@ -414,7 +527,7 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (*Crea
 		issueCreate(input: $input) {
 			success
 			issue {
-` + fullIssueSelection + `			}
+` + fullIssueWithLinksSelection + `			}
 		}
 	}
 `
@@ -439,6 +552,7 @@ type UpdateIssueInput struct {
 	ProjectID   *string `json:"projectId,omitempty"`
 	AssigneeID  *string `json:"assigneeId,omitempty"`
 	StateID     *string `json:"stateId,omitempty"`
+	ParentID    *string `json:"parentId,omitempty"`
 }
 
 // UpdateIssueResponse is the response for updating an issue
@@ -455,7 +569,7 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input UpdateIssueIn
 		issueUpdate(id: $id, input: $input) {
 			success
 			issue {
-` + fullIssueSelection + `			}
+` + fullIssueWithLinksSelection + `			}
 		}
 	}
 `
@@ -465,6 +579,58 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input UpdateIssueIn
 	}
 
 	var resp UpdateIssueResponse
+	if err := c.Do(ctx, query, vars, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// CreateIssueRelationInput represents the input for creating an issue
+// relation. IssueID and RelatedIssueID must be UUIDs, not identifiers such as
+// ENG-123. For a blocks relation, IssueID blocks RelatedIssueID.
+type CreateIssueRelationInput struct {
+	IssueID        string `json:"issueId"`
+	RelatedIssueID string `json:"relatedIssueId"`
+	Type           string `json:"type"`
+}
+
+// CreateIssueRelationResponse is the response for creating an issue relation
+type CreateIssueRelationResponse struct {
+	IssueRelationCreate struct {
+		Success       bool           `json:"success"`
+		IssueRelation *IssueRelation `json:"issueRelation"`
+	} `json:"issueRelationCreate"`
+}
+
+// CreateIssueRelation creates a relation (e.g. blocks, related) between two
+// issues
+func (c *Client) CreateIssueRelation(ctx context.Context, input CreateIssueRelationInput) (*CreateIssueRelationResponse, error) {
+	query := `mutation($input: IssueRelationCreateInput!) {
+		issueRelationCreate(input: $input) {
+			success
+			issueRelation {
+				id
+				type
+				issue {
+					id
+					identifier
+					title
+				}
+				relatedIssue {
+					id
+					identifier
+					title
+				}
+			}
+		}
+	}
+`
+	vars := map[string]interface{}{
+		"input": input,
+	}
+
+	var resp CreateIssueRelationResponse
 	if err := c.Do(ctx, query, vars, &resp); err != nil {
 		return nil, err
 	}

@@ -42,6 +42,18 @@ func assertIssueProjectSelectsURL(t *testing.T, query string) {
 	}
 }
 
+// assertQuerySelectsIssueLinks checks that a single-issue query or mutation
+// selects the sub-issue and both relation connections. "relations(" is
+// lowercase, so it does not match inside "inverseRelations(".
+func assertQuerySelectsIssueLinks(t *testing.T, query string) {
+	t.Helper()
+	for _, want := range []string{"children(first: 50)", "relations(first: 50)", "inverseRelations(first: 50)"} {
+		if !strings.Contains(query, want) {
+			t.Errorf("Expected query to contain %q, got query: %s", want, query)
+		}
+	}
+}
+
 const mockIssueProjectURL = "https://linear.app/test/project/mobile-app-abc123"
 
 func TestClient_ListIssues_NoFilter(t *testing.T) {
@@ -1049,4 +1061,356 @@ func TestListAllIssues_UnknownStateTypeRejectedBeforeRequest(t *testing.T) {
 		require.Contains(t, err.Error(), v)
 	}
 	require.Equal(t, 0, *requests, "invalid state type must be rejected before any request")
+}
+
+func TestClient_CreateIssue_WithParent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		input, ok := req.Variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected input object in variables, got %T", req.Variables["input"])
+		}
+		require.Equal(t, "parent-uuid-1", input["parentId"])
+		assertQuerySelectsIssueLinks(t, req.Query)
+
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issueCreate": {
+					"success": true,
+					"issue": {
+						"id": "child-uuid",
+						"identifier": "TEST-2",
+						"title": "Child",
+						"parent": {
+							"id": "parent-uuid-1",
+							"identifier": "TEST-1",
+							"title": "Parent",
+							"url": "https://linear.app/test/issue/TEST-1"
+						}
+					}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	resp, err := client.CreateIssue(context.Background(), CreateIssueInput{
+		Title:    "Child",
+		TeamID:   "team-123",
+		ParentID: "parent-uuid-1",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.IssueCreate.Issue)
+	require.NotNil(t, resp.IssueCreate.Issue.Parent)
+	require.Equal(t, "TEST-1", resp.IssueCreate.Issue.Parent.Identifier)
+}
+
+func TestClient_UpdateIssue_WithParent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		input, ok := req.Variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected input object in variables, got %T", req.Variables["input"])
+		}
+		require.Equal(t, "parent-uuid-2", input["parentId"])
+		assertQuerySelectsIssueLinks(t, req.Query)
+		// Only the parent was set, so no other field may be sent.
+		require.Len(t, input, 1, "expected only parentId in input, got %v", input)
+
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issueUpdate": {
+					"success": true,
+					"issue": {
+						"id": "issue-uuid",
+						"identifier": "TEST-3",
+						"title": "Child",
+						"parent": {
+							"id": "parent-uuid-2",
+							"identifier": "TEST-1",
+							"title": "Parent"
+						}
+					}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	parentID := "parent-uuid-2"
+	resp, err := client.UpdateIssue(context.Background(), "TEST-3", UpdateIssueInput{ParentID: &parentID})
+	require.NoError(t, err)
+	require.NotNil(t, resp.IssueUpdate.Issue)
+	require.NotNil(t, resp.IssueUpdate.Issue.Parent)
+	require.Equal(t, "parent-uuid-2", resp.IssueUpdate.Issue.Parent.ID)
+}
+
+func TestClient_CreateIssueRelation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		if !strings.Contains(req.Query, "issueRelationCreate") {
+			t.Errorf("Expected issueRelationCreate mutation, got query: %s", req.Query)
+		}
+		if !strings.Contains(req.Query, "issueRelation {") {
+			t.Errorf("Expected mutation to select issueRelation, got query: %s", req.Query)
+		}
+		if !strings.Contains(req.Query, "$input: IssueRelationCreateInput!") {
+			t.Errorf("Expected $input: IssueRelationCreateInput! variable, got query: %s", req.Query)
+		}
+
+		input, ok := req.Variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected input object in variables, got %T", req.Variables["input"])
+		}
+		require.Equal(t, "blocker-uuid", input["issueId"])
+		require.Equal(t, "blocked-uuid", input["relatedIssueId"])
+		require.Equal(t, "blocks", input["type"])
+
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issueRelationCreate": {
+					"success": true,
+					"issueRelation": {
+						"id": "rel-1",
+						"type": "blocks",
+						"issue": {"id": "blocker-uuid", "identifier": "TEST-1", "title": "Blocker"},
+						"relatedIssue": {"id": "blocked-uuid", "identifier": "TEST-2", "title": "Blocked"}
+					}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	resp, err := client.CreateIssueRelation(context.Background(), CreateIssueRelationInput{
+		IssueID:        "blocker-uuid",
+		RelatedIssueID: "blocked-uuid",
+		Type:           RelationTypeBlocks,
+	})
+	require.NoError(t, err)
+	require.True(t, resp.IssueRelationCreate.Success)
+
+	rel := resp.IssueRelationCreate.IssueRelation
+	require.NotNil(t, rel)
+	require.Equal(t, "rel-1", rel.ID)
+	require.Equal(t, "blocks", rel.Type)
+	require.NotNil(t, rel.Issue)
+	require.Equal(t, "TEST-1", rel.Issue.Identifier)
+	require.Equal(t, "blocker-uuid", rel.Issue.ID)
+	require.NotNil(t, rel.RelatedIssue)
+	require.Equal(t, "TEST-2", rel.RelatedIssue.Identifier)
+	require.Equal(t, "blocked-uuid", rel.RelatedIssue.ID)
+}
+
+func TestClient_CreateIssueRelation_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := graphQLResponse{
+			Errors: []struct {
+				Message string `json:"message"`
+				Path    []any  `json:"path,omitempty"`
+			}{
+				{Message: "Entity not found: Issue"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	resp, err := client.CreateIssueRelation(context.Background(), CreateIssueRelationInput{
+		IssueID:        "a",
+		RelatedIssueID: "b",
+		Type:           RelationTypeRelated,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Entity not found: Issue")
+	require.Nil(t, resp)
+}
+
+func TestClient_GetIssue_WithLinks(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		if !strings.Contains(req.Query, "parent {") {
+			t.Errorf("Expected query to select parent, got query: %s", req.Query)
+		}
+		assertQuerySelectsIssueLinks(t, req.Query)
+		assertIssueProjectSelectsURL(t, req.Query)
+
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issue": {
+					"id": "issue-uuid",
+					"identifier": "TEST-5",
+					"title": "Middle",
+					"project": {"id": "proj-123", "name": "Mobile App", "url": "https://linear.app/test/project/mobile-app-abc123"},
+					"parent": {"id": "parent-uuid", "identifier": "TEST-1", "title": "Epic", "url": "https://linear.app/test/issue/TEST-1"},
+					"children": {"nodes": [
+						{"id": "c1", "identifier": "TEST-6", "title": "Child one", "url": "https://linear.app/test/issue/TEST-6"},
+						{"id": "c2", "identifier": "TEST-7", "title": "Child two", "url": "https://linear.app/test/issue/TEST-7"}
+					]},
+					"relations": {"nodes": [
+						{
+							"id": "rel-1",
+							"type": "blocks",
+							"issue": {"id": "issue-uuid", "identifier": "TEST-5", "title": "Middle"},
+							"relatedIssue": {"id": "other-uuid", "identifier": "TEST-9", "title": "Downstream"}
+						},
+						{
+							"id": "rel-2",
+							"type": "related",
+							"issue": {"id": "issue-uuid", "identifier": "TEST-5", "title": "Middle"},
+							"relatedIssue": {"id": "rel-uuid", "identifier": "TEST-10", "title": "Sibling"}
+						}
+					]},
+					"inverseRelations": {"nodes": [
+						{
+							"id": "rel-3",
+							"type": "blocks",
+							"issue": {"id": "upstream-uuid", "identifier": "TEST-4", "title": "Upstream", "url": "https://linear.app/test/issue/TEST-4"},
+							"relatedIssue": {"id": "issue-uuid", "identifier": "TEST-5", "title": "Middle", "url": "https://linear.app/test/issue/TEST-5"}
+						}
+					]}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	resp, err := client.GetIssue(context.Background(), "TEST-5")
+	require.NoError(t, err)
+	issue := resp.Issue
+	require.NotNil(t, issue)
+
+	require.NotNil(t, issue.Parent)
+	require.Equal(t, IssueRef{ID: "parent-uuid", Identifier: "TEST-1", Title: "Epic", URL: "https://linear.app/test/issue/TEST-1"}, *issue.Parent)
+
+	require.NotNil(t, issue.Children)
+	require.Len(t, issue.Children.Nodes, 2)
+	require.Equal(t, "TEST-6", issue.Children.Nodes[0].Identifier)
+	require.Equal(t, "TEST-7", issue.Children.Nodes[1].Identifier)
+	require.Equal(t, "Child two", issue.Children.Nodes[1].Title)
+
+	require.NotNil(t, issue.Relations)
+	require.Len(t, issue.Relations.Nodes, 2)
+	blocks := issue.Relations.Nodes[0]
+	require.Equal(t, "rel-1", blocks.ID)
+	require.Equal(t, RelationTypeBlocks, blocks.Type)
+	require.NotNil(t, blocks.Issue)
+	require.Equal(t, "TEST-5", blocks.Issue.Identifier)
+	require.NotNil(t, blocks.RelatedIssue)
+	require.Equal(t, "TEST-9", blocks.RelatedIssue.Identifier)
+	require.Equal(t, RelationTypeRelated, issue.Relations.Nodes[1].Type)
+	require.Equal(t, "TEST-10", issue.Relations.Nodes[1].RelatedIssue.Identifier)
+
+	// Incoming edges hydrate separately: here TEST-4 blocks this issue.
+	require.NotNil(t, issue.InverseRelations)
+	require.Len(t, issue.InverseRelations.Nodes, 1)
+	inverse := issue.InverseRelations.Nodes[0]
+	require.Equal(t, "rel-3", inverse.ID)
+	require.Equal(t, RelationTypeBlocks, inverse.Type)
+	require.NotNil(t, inverse.Issue)
+	require.Equal(t, IssueRef{ID: "upstream-uuid", Identifier: "TEST-4", Title: "Upstream", URL: "https://linear.app/test/issue/TEST-4"}, *inverse.Issue)
+	require.NotNil(t, inverse.RelatedIssue)
+	require.Equal(t, "issue-uuid", inverse.RelatedIssue.ID)
+}
+
+func TestClient_ListIssues_WithoutLinks(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		// issue list stays light: per-issue connections would multiply the
+		// cost of every page (see #18).
+		for _, banned := range []string{"relations(", "inverseRelations(", "children("} {
+			if strings.Contains(req.Query, banned) {
+				t.Errorf("Expected list query not to contain %q, got query: %s", banned, req.Query)
+			}
+		}
+		assertIssueProjectSelectsURL(t, req.Query)
+
+		response := graphQLResponse{
+			Data: json.RawMessage(`{
+				"issues": {
+					"nodes": [{"id": "issue-1", "identifier": "TEST-1", "title": "One"}],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}`),
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     "test-key",
+		endpoint:   server.URL,
+	}
+
+	resp, err := client.ListIssues(context.Background(), ListIssuesOptions{})
+	require.NoError(t, err)
+	require.Len(t, resp.Issues.Nodes, 1)
+
+	// Unselected connections stay nil so they are omitted from JSON rather
+	// than reported as empty.
+	issue := resp.Issues.Nodes[0]
+	require.Nil(t, issue.Children)
+	require.Nil(t, issue.Relations)
+	require.Nil(t, issue.InverseRelations)
+	out, err := json.Marshal(issue)
+	require.NoError(t, err)
+	for _, key := range []string{`"children"`, `"relations"`, `"inverseRelations"`} {
+		require.NotContains(t, string(out), key)
+	}
+	require.Contains(t, string(out), `"parent":null`)
 }
