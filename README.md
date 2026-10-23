@@ -187,6 +187,8 @@ linear issue view <uuid>
 linear issue view ENG-123 --json
 ```
 
+Issue JSON from `issue view`, `issue create` and `issue update` includes `parent` (`{id, identifier, title, url}` or `null`), `children.nodes` (sub-issues, up to 50), `relations.nodes` (outgoing edges, where this issue is `issue`) and `inverseRelations.nodes` (incoming edges, where this issue is `relatedIssue`). Relation nodes are `{id, type, issue, relatedIssue}`, up to 50 per connection; for `type: "blocks"`, `issue` blocks `relatedIssue`. Single-issue commands (`view`, `create`, `update`) select these connections. `issue list --json` includes `parent` but omits the `children`, `relations` and `inverseRelations` keys entirely, because a 100-issue page would otherwise fan out into 300 nested connections; use `issue view` to read an issue's links. An empty `nodes` array means the issue has no such links. The text output of `issue view` shows `Parent`, `Sub-issues` and `Relations` lines when they are set; `Relations` reads e.g. `blocks ENG-124, blocked by ENG-120, related ENG-130`. `issue create` and `issue update` print a `Parent: <identifier> <title>` line when `--parent` is set.
+
 #### `linear issue create`
 Create a new issue.
 
@@ -200,6 +202,9 @@ linear issue create \
   --title "Fix bug in authentication" \
   --description "Users are experiencing login failures" \
   --assignee "user@example.com"
+
+# Sub-issue of ENG-100 (identifier or UUID)
+linear issue create --team ENG --title "Write migration" --parent ENG-100
 
 # JSON output
 linear issue create --team ENG --title "Bug fix" --json
@@ -224,9 +229,19 @@ linear issue update ENG-123 --assignee "user@example.com"
 # Clear description
 linear issue update ENG-123 --description ""
 
+# Make it a sub-issue of ENG-100
+linear issue update ENG-123 --parent ENG-100
+
+# Relations: ENG-123 blocks ENG-124 and ENG-125, is blocked by ENG-120, and is related to ENG-130
+linear issue update ENG-123 --blocks ENG-124 --blocks ENG-125 --blocked-by ENG-120 --related ENG-130
+
 # JSON output
 linear issue update ENG-123 --title "Updated issue title" --json
 ```
+
+`--blocks`, `--blocked-by` and `--related` are repeatable, one issue per flag (values are not split on commas). They only add relations; existing relations are left as they are. Relation flags can be used on their own or combined with field updates. With `--json`, the issue is fetched again after the relations are created so they appear in the output.
+
+`--blocks` and `--related` read back under the updated issue's `relations`. `--blocked-by X` is stored on the blocking issue (X blocks this issue), so it reads back under this issue's `inverseRelations`, and under X's `relations`.
 
 ### Project Commands
 

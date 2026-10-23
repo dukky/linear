@@ -18,8 +18,8 @@ Manage Linear issues, teams, and projects from the command line.
 | View issue | `linear issue view ID [--json]` |
 | List comments | `linear issue comments ID [--json]` |
 | Add comment | `linear issue comment ID "message" [--json]` |
-| Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--priority 0-4] [--json]` |
-| Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--json]` |
+| Create issue | `linear issue create --team KEY --title "..." [--description "..."] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--priority 0-4] [--parent ID] [--json]` |
+| Update issue | `linear issue update ID [--title "..."] [--description "..."] [--priority 0-4] [--project "..."] [--assignee "user@example.com"] [--state "..."] [--parent ID] [--blocks ID]... [--blocked-by ID]... [--related ID]... [--json]` |
 | List teams | `linear team list [--json]` |
 | List projects | `linear project list [--team KEY] [--json]` |
 | View project | `linear project view NAME_OR_ID [--team KEY] [--json]` |
@@ -48,8 +48,15 @@ Manage Linear issues, teams, and projects from the command line.
  "assignee": {"name": "...", "email": "..."},
  "team": {"key": "ENG", "name": "Engineering"},
  "project": {"id": "uuid", "name": "Q1 Goals", "url": "https://linear.app/..."},
- "labels": {"nodes": [{"name": "bug"}]}}
+ "parent": {"id": "uuid", "identifier": "ENG-100", "title": "...", "url": "..."},
+ "labels": {"nodes": [{"name": "bug"}]},
+ "children": {"nodes": [{"id": "uuid", "identifier": "ENG-124", "title": "...", "url": "..."}]},
+ "relations": {"nodes": [{"id": "uuid", "type": "blocks",
+   "issue": {"identifier": "ENG-123", ...}, "relatedIssue": {"identifier": "ENG-125", ...}}]},
+ "inverseRelations": {"nodes": [{"id": "uuid", "type": "blocks",
+   "issue": {"identifier": "ENG-120", ...}, "relatedIssue": {"identifier": "ENG-123", ...}}]}}
 ```
+`parent` is `null` for top-level issues. `relations` are outgoing edges (this issue is `issue`); `inverseRelations` are incoming edges (this issue is `relatedIssue`). For `type: "blocks"`, `issue` blocks `relatedIssue`, so "what blocks ENG-123" is `inverseRelations` with `type: "blocks"`. Single-issue commands (`issue view`/`create`/`update`) select `children`, `relations` and `inverseRelations` (up to 50 each). `issue list --json` includes `parent` but omits those three keys entirely, because a 100-issue page would otherwise fan out into 300 nested connections. A missing key means "not fetched" (use `issue view ID --json`); an empty `nodes` array means "none".
 
 ### Team
 ```json
@@ -118,6 +125,18 @@ linear issue create --team ENG --title "Add feature" --priority 2 --json
 ```
 
 New issues default to the **Triage** state. Set a resting state on creation (`--state "Backlog"` / `"Todo"`), or update it straight after with `linear issue update`, so created issues aren't left in triage.
+
+**Create a sub-issue:**
+```bash
+linear issue create --team ENG --title "Write migration" --parent ENG-100 --json
+```
+
+**Set a parent or add relations to an existing issue:**
+```bash
+linear issue update ENG-123 --parent ENG-100 --json
+linear issue update ENG-123 --blocks ENG-124 --blocked-by ENG-120 --related ENG-130 --json
+```
+`--blocks`, `--blocked-by` and `--related` are repeatable (one issue per flag, no comma splitting, empty values rejected) and only add relations. `--blocked-by X` is stored on X, so it reads back under this issue's `inverseRelations`, not `relations`.
 
 **View issue details:**
 ```bash
